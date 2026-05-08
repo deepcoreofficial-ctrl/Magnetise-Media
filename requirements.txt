@@ -10,4 +10,4 @@ gunicorn
 PyMySQL
 cryptography
 flask-cors
-pymysql
+mysqlclient==2.2.4

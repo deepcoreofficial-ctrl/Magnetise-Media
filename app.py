@@ -13,8 +13,6 @@ from flask_limiter.util import get_remote_address
 from datetime import timedelta
 import re
 from flask_cors import CORS
-import pymysql
-pymysql.install_as_MySQLdb()
 
 load_dotenv()
 
