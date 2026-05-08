@@ -1,0 +1,12 @@
+Flask==3.0.0
+Flask
+flask-mysqldb
+passlib
+python-dotenv
+sib-api-v3-sdk
+flask-limiter
+reportlab
+gunicorn
+PyMySQL
+cryptography
+flask-cors

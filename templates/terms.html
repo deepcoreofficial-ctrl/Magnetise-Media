@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - Magnetise Media</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #111111;
+            --ink: #0a0a0a;
+            --muted: #f5f5f5;
+            --muted-fg: #555555;
+            --border: #e8e8e8;
+            --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+            --font-display: "Cormorant Garamond", "Apple Garamond", Garamond, Georgia, serif;
+            --shadow-soft: 0 4px 20px -8px rgba(0,0,0,0.10);
+            --shadow-elegant: 0 24px 70px -24px rgba(0,0,0,0.25);
+            --shadow-3d: 0 6px 28px -4px rgba(0,0,0,0.13), 0 2px 6px -2px rgba(0,0,0,0.08), 0 1px 0 0 rgba(255,255,255,0.8) inset;
+            --shadow-glass: 0 1px 0 0 rgba(255,255,255,0.6) inset, 0 10px 40px -10px rgba(0,0,0,0.10);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--fg);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1 {
+            font-family: var(--font-display);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        h2, h3, h4 {
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 400;
+            letter-spacing: -0.015em;
+            color: var(--ink);
+        }
+
+        a { text-decoration: none; color: inherit; }
+
+        /* ── GLASS ── */
+        .glass {
+            background: rgba(255,255,255,0.18);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid rgba(255,255,255,0.35);
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.12),
+                inset 0 1px 0 rgba(255,255,255,0.45);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── NAVBAR ── */
+        .navbar {
+            position: fixed;
+            top: 2.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            width: calc(100% - 4rem);
+            max-width: 45rem;
+        }
+
+        .nav-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            border-radius: 9999px;
+            padding: 0.50rem 1.2rem;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.02rem;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1.45rem;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+            cursor: pointer;
+            user-select: none;
+            text-decoration: none;
+        }
+
+        .nav-logo img {
+            width: 3.2rem;
+            height: 3.2rem;
+            object-fit: cover;
+            transform: scale(1.55);
+            transform-origin: center;
+        }
+
+        /* ── SHINING BACK BTN ── */
+        .nav-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.1rem;
+            border-radius: 9999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            background: var(--ink);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+
+        .nav-back-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                110deg,
+                transparent 20%,
+                rgba(255,255,255,0.55) 50%,
+                transparent 80%
+            );
+            transform: translateX(-120%);
+            animation: btn-shine 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .nav-back-btn:hover {
+            opacity: 0.88;
+            transform: scale(1.03);
+        }
+
+        .nav-back-btn:hover::after {
+            animation: btn-shine-fast 0.7s ease forwards;
+        }
+
+        @media (max-width: 640px) {
+            .navbar { width: calc(100% - 1.5rem); top: 0.875rem; }
+        }
+
+        /* ── MAIN WRAPPER ── */
+        .terms-wrapper {
+            width: min(860px, 92%);
+            margin: 0 auto;
+            padding-top: clamp(10rem, 18vh, 14rem);
+            padding-bottom: 4rem;
+            position: relative;
+            z-index: 3;
+        }
+
+        /* ── GLASS CARD ── */
+        .terms-glass-container {
+            background: rgba(255,255,255,0.16);
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 34px;
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            padding: 70px;
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.12),
+                inset 0 1px 0 rgba(255,255,255,0.45);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── HEADER ── */
+        .terms-header {
+            text-align: center;
+            margin-bottom: 70px;
+        }
+
+        .terms-logo {
+            width: 200px;
+            height: 200px;
+            object-fit: contain;
+            margin: 0 auto -35px;
+            display: block;
+        }
+
+        .terms-header h1 {
+            font-size: clamp(2.6rem, 6vw, 3.8rem);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            margin-bottom: 14px;
+            color: var(--ink);
+        }
+
+        .terms-subtitle {
+            color: #000000;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .terms-updated {
+            color: #000000;
+            font-size: 15px;
+            margin-bottom: 6px;
+        }
+
+        .terms-contact {
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .terms-contact a {
+            color: #000000;
+            opacity: 1;
+        }
+
+        .terms-contact a:hover { text-decoration: underline; }
+
+        /* ── SECTIONS ── */
+        .terms-section {
+            margin-bottom: 60px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            padding-bottom: 50px;
+        }
+
+        .terms-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .terms-section h2 {
+            font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: var(--ink);
+            letter-spacing: -0.02em;
+        }
+
+        .terms-section h3 {
+            font-size: 18px;
+            font-weight: 700;
+            font-family: var(--font-sans);
+            margin-top: 24px;
+            margin-bottom: 14px;
+            color: #222;
+        }
+
+        .terms-section p {
+            color: #020202;
+            font-size: 15px;
+            font-weight: 400;
+            line-height: 1.9;
+            margin-bottom: 14px;
+        }
+
+        .terms-section ul {
+            padding-left: 22px;
+            margin-top: 12px;
+        }
+
+        .terms-section li {
+            color: #272727;
+            margin-bottom: 10px;
+            line-height: 1.8;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .terms-section strong { color: var(--ink); }
+
+        .icon-list { list-style: none; padding-left: 0; }
+        .icon-list li { position: relative; padding-left: 34px; }
+        .icon-list li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--ink); font-weight: 700; }
+        .icon-list-x li::before { content: "✕"; }
+
+        /* ── KEY TERMS BOX ── */
+        .key-terms-box {
+            background: rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 16px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .key-terms-box h3 {
+            margin-top: 0 !important;
+            color: var(--ink) !important;
+        }
+
+        .key-terms-box ul {
+            margin: 10px 0;
+        }
+
+        /* ── EXAMPLE BOX ── */
+        .example-box {
+            background: rgba(0,0,0,0.02);
+            border-left: 3px solid var(--ink);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .example-box p { margin-bottom: 10px; }
+
+        /* ── WORDMARK ── */
+        .wordmark {
+            padding-top: 3rem;
+            padding-bottom: 2rem;
+            user-select: none;
+            overflow: hidden;
+            position: relative;
+            z-index: 3;
+        }
+
+        .wordmark-inner {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: clamp(0.06rem, 0.6vw, 0.5rem);
+            padding-inline: 0.75rem;
+        }
+
+        .wm-char { display: flex; flex-direction: column; align-items: center; }
+
+        .wm-string {
+            display: block;
+            width: 1px;
+            background: rgba(0,0,0,0.20);
+            margin-top: 0.3rem;
+        }
+
+        @keyframes sway {
+            0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(var(--ty, 0px)); }
+            50%       { transform: rotate(calc(var(--rot, 0deg) + 1.2deg)) translateY(calc(var(--ty, 0px) + 5px)); }
+        }
+
+        .hang-letter {
+            display: inline-block;
+            transform-origin: top center;
+            animation: sway 5s ease-in-out infinite;
+        }
+
+        /* ── COPYRIGHT BAR ── */
+        .footer-bar {
+            border-top: 1px solid rgba(0, 0, 0, 0.295);
+            padding-block: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 3;
+        }
+
+        .footer-bar span {
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+            font-weight: 500;
+            color: rgba(0, 0, 0, 0.911);
+        }
+
+        /* ── MOBILE ── */
+        @media (max-width: 768px) {
+            .terms-glass-container {
+                padding: 34px 22px;
+                border-radius: 24px;
+            }
+            .terms-header { margin-bottom: 50px; }
+            .terms-logo { width: 120px; height: 120px; margin-bottom: -20px; }
+            .terms-header h1 { font-size: 2rem; }
+            .terms-section h2 { font-size: 1.4rem; }
+            .terms-section p,
+            .terms-section li { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── NAVBAR ── -->
+    <nav class="navbar">
+        <div class="nav-inner glass">
+            <a href="/" class="nav-logo">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media" />
+                Magnetise Media
+            </a>
+            <a href="/" class="nav-back-btn">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M19 12H5M12 5l-7 7 7 7"/>
+                </svg>
+                Back to Home
+            </a>
+        </div>
+    </nav>
+
+    <!-- ── TERMS CONTENT ── -->
+    <div class="terms-wrapper">
+        <div class="terms-glass-container">
+
+            <div class="terms-header">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media Logo" class="terms-logo">
+                <h1>Terms of Service</h1>
+                <p class="terms-subtitle">(For Clients)</p>
+                <p class="terms-updated">Effective Date: January 2025</p>
+                <p class="terms-updated">Operating Entity: Magnetise Media (India-based distribution service)</p>
+                <p class="terms-contact">Contact: <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration:underline;">magnetisemedia.co@gmail.com</a> | Instagram: <a href="https://instagram.com/magnetise.media" target="_blank" style="text-decoration:underline;">@magnetise.media</a></p>
+            </div>
+
+            <div class="terms-section">
+                <h2>1. Service Overview</h2>
+                <p>Magnetise Media provides organic content distribution services. We distribute your content as short-form clips across our verified clipper network on multiple social media platforms.</p>
+                <div class="key-terms-box">
+                    <h3 style="margin-top:0;">Key Terms:</h3>
+                    <ul>
+                        <li><strong>Campaign Duration:</strong> Typically 5–7 days. If guaranteed views are not achieved, campaign automatically extends until targets are met.</li>
+                        <li><strong>Extended Reach:</strong> Clips remain live for minimum 2 months after campaign completion</li>
+                        <li><strong>Guaranteed Views:</strong> Based on your campaign budget and discussed during consultation</li>
+                        <li><strong>Minimum Budget:</strong> $300 USD</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="terms-section">
+                <h2>2. Eligibility</h2>
+                <ul>
+                    <li>Must be 18 years or older</li>
+                    <li>Must have legal rights to all content submitted</li>
+                    <li>Available to individuals and businesses worldwide</li>
+                    <li>Service operated from India</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>3. Prohibited Content</h2>
+                <p>We do NOT accept campaigns containing:</p>
+                <ul class="icon-list icon-list-x">
+                    <li>Gambling or betting content</li>
+                    <li>Nudity or adult content</li>
+                    <li>Political campaigns or partisan content</li>
+                    <li>Illegal activities</li>
+                    <li>Hate speech or violence</li>
+                    <li>Misleading or false information</li>
+                </ul>
+                <h3>Quality Standards:</h3>
+                <ul>
+                    <li>We do not accept clips with engagement rate below 0.25%</li>
+                    <li>Content must meet platform community guidelines</li>
+                    <li>All content subject to review before campaign launch</li>
+                </ul>
+                <p><strong>Magnetise Media reserves the right to reject any campaign that violates these guidelines.</strong></p>
+            </div>
+
+            <div class="terms-section">
+                <h2>4. How It Works</h2>
+                <h3>Step 1: Initial Contact</h3>
+                <ul>
+                    <li>Book a strategy call OR email us at magnetisemedia.co@gmail.com</li>
+                    <li>Discuss your content, goals, and budget</li>
+                </ul>
+                <h3>Step 2: Campaign Planning</h3>
+                <ul>
+                    <li>Share your content and campaign guidelines</li>
+                    <li>We provide guaranteed view targets based on budget</li>
+                    <li>Finalize campaign brief and timeline</li>
+                </ul>
+                <h3>Step 3: Payment</h3>
+                <ul>
+                    <li>Pay 30% of campaign budget upfront (non-refundable operational fee)</li>
+                    <li>Pay remaining 70% before campaign launch</li>
+                    <li>Payment Methods: PayPal or Cryptocurrency</li>
+                    <li>All payments processed securely</li>
+                </ul>
+                <h3>Step 4: Campaign Launch</h3>
+                <ul>
+                    <li>We distribute content across our clipper network (5–7 days typically)</li>
+                    <li>Real-time tracking via Client Dashboard</li>
+                    <li>Campaign extends automatically if views target not met</li>
+                </ul>
+                <h3>Step 5: Extended Reach</h3>
+                <ul>
+                    <li>Clips remain live for minimum 2 months</li>
+                    <li>Continue accumulating organic views</li>
+                </ul>
+                <h3>Step 6: Final Report</h3>
+                <ul>
+                    <li>Receive comprehensive campaign report</li>
+                    <li>Download anytime from dashboard</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>5. Payment Terms</h2>
+                <h3>Budget Structure:</h3>
+                <ul>
+                    <li><strong>Minimum:</strong> $300 USD</li>
+                    <li><strong>No Maximum:</strong> Scale campaigns to any budget</li>
+                </ul>
+                <h3>Payment Breakdown:</h3>
+                <ul>
+                    <li><strong>30% Upfront:</strong> Operations fee (non-refundable)</li>
+                    <li><strong>70% Remaining:</strong> View guarantee portion</li>
+                </ul>
+                <h3>Payment Methods:</h3>
+                <ul>
+                    <li>PayPal (primary method)</li>
+                    <li>Cryptocurrency (Bitcoin, Ethereum, USDT accepted)</li>
+                </ul>
+                <h3>Payment Schedule:</h3>
+                <ul>
+                    <li>30% paid during initial consultation</li>
+                    <li>70% paid before campaign launch</li>
+                    <li>No campaign starts without full payment</li>
+                </ul>
+                <div class="example-box">
+                    <p><strong>Example:</strong></p>
+                    <ul>
+                        <li>Total Budget: $1,000</li>
+                        <li>Upfront (30%): $300 (non-refundable)</li>
+                        <li>Remaining (70%): $700 (view guarantee portion)</li>
+                    </ul>
+                </div>
+                <h3>What Your Budget Covers:</h3>
+                <ul>
+                    <li>Content editing and optimization</li>
+                    <li>Distribution across verified clipper network</li>
+                    <li>Campaign management and monitoring</li>
+                    <li>Performance tracking and reporting</li>
+                    <li>Client dashboard access</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>6. Refund Policy</h2>
+                <h3>View Guarantee on 70% Budget Portion:</h3>
+                <ul>
+                    <li>Guaranteed views calculated on 70% of total budget only</li>
+                    <li>30% upfront fee is non-refundable under all circumstances</li>
+                </ul>
+                <h3>30-Day Guarantee:</h3>
+                <ul>
+                    <li>If guaranteed views not achieved within 30 days → Campaign extends automatically</li>
+                    <li>If still not met after extended period → Eligible for refund on undelivered views</li>
+                </ul>
+                <h3>Mid-Campaign Cancellation:</h3>
+                <div class="example-box">
+                    <p><strong>Example Scenario:</strong></p>
+                    <ul>
+                        <li>Total Budget: $1,000</li>
+                        <li>Upfront Fee (30%): $300 (already retained by Magnetise Media)</li>
+                        <li>View Guarantee Budget (70%): $700</li>
+                    </ul>
+                    <p><strong>If $400 worth of views delivered and client cancels:</strong></p>
+                    <ul>
+                        <li>Views Delivered: $400 (from $700 budget)</li>
+                        <li>Unused Budget: $300 (from $700 budget)</li>
+                        <li>Client Receives: $300 refund</li>
+                        <li>Magnetise Media Retains: $300 (upfront) + $400 (delivered views) = $700 total</li>
+                    </ul>
+                </div>
+                <h3>Refund Processing:</h3>
+                <ul>
+                    <li>Processed within 14 business days via original payment method</li>
+                    <li>PayPal refunds: 3–5 business days</li>
+                    <li>Crypto refunds: 7–10 business days</li>
+                </ul>
+                <h3>No Refund Scenarios:</h3>
+                <ul>
+                    <li>30% upfront operational fee (never refunded)</li>
+                    <li>If guaranteed views are achieved</li>
+                    <li>If content violates our guidelines (discovered post-launch)</li>
+                    <li>If client provides incorrect or incomplete content</li>
+                    <li>If client violates these Terms</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>7. Client Dashboard Access</h2>
+                <p>Upon campaign launch, you receive access to your Client Dashboard where you can view:</p>
+                <h3>Real-Time Progress:</h3>
+                <ul>
+                    <li>Total views achieved</li>
+                    <li>Budget utilized vs. remaining</li>
+                    <li>Campaign status (Active/Extended/Completed)</li>
+                    <li>Days elapsed in campaign</li>
+                </ul>
+                <h3>Top Performing Clips:</h3>
+                <ul>
+                    <li>Only clips with 10,000+ views displayed</li>
+                    <li>Direct links to view clips on social platforms</li>
+                    <li>Individual clip performance metrics</li>
+                    <li>Platform breakdown (Instagram/TikTok/YouTube)</li>
+                </ul>
+                <h3>Budget Transparency:</h3>
+                <ul>
+                    <li>Leaderboard showing clipper performance (for transparency)</li>
+                    <li>Budget allocation across network</li>
+                    <li>Top performing clippers by views</li>
+                </ul>
+                <h3>Final Campaign Report:</h3>
+                <ul>
+                    <li>Downloadable PDF report at campaign end</li>
+                    <li>Includes: Total views, budget used, campaign duration, top clips (10k+ views only), platform breakdown</li>
+                    <li>Available for download for 1 year after campaign completion</li>
+                    <li>Report includes only high-performing clips (10k+ views)</li>
+                </ul>
+                <p><strong>Note:</strong> Full list of all clips is NOT provided. Only clips with 10,000+ views included in dashboard and final report to maintain focus on high-impact content.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>8. Content Rights &amp; Ownership</h2>
+                <h3>Your Ownership:</h3>
+                <ul>
+                    <li>You retain 100% ownership of your original content</li>
+                    <li>Magnetise Media makes no claim to your intellectual property</li>
+                </ul>
+                <h3>License Granted to Magnetise Media:</h3>
+                <p>By submitting content, you grant Magnetise Media a non-exclusive license to:</p>
+                <ul>
+                    <li>Edit content into short-form clips</li>
+                    <li>Distribute clips to our clipper network for posting</li>
+                    <li>Share brand/campaign name with clippers for context</li>
+                    <li>Use clips for promotional purposes (with your permission)</li>
+                </ul>
+                <h3>Brand Information Shared with Clippers:</h3>
+                <ul>
+                    <li>We share your brand name with clippers</li>
+                    <li>Clippers know which brand's content they are clipping</li>
+                    <li>This ensures proper context and quality control</li>
+                </ul>
+                <h3>Your Responsibilities:</h3>
+                <ul>
+                    <li>You confirm you own all rights to submitted content</li>
+                    <li>You confirm content does not violate third-party copyrights, trademarks, or rights</li>
+                    <li>You are solely responsible for any copyright claims arising from your content</li>
+                    <li>If copyright issues arise, you agree to indemnify Magnetise Media from all legal costs and damages</li>
+                </ul>
+                <h3>Third-Party Content:</h3>
+                <ul>
+                    <li>If using music, images, or footage you don't own, you must have proper licenses</li>
+                    <li>Magnetise Media is not liable for your unauthorized use of third-party content</li>
+                    <li>All content must be cleared for commercial use across social platforms</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>9. Confidentiality &amp; Non-Disclosure</h2>
+                <h3>What We Keep Private:</h3>
+                <ul>
+                    <li>Your campaign strategy and goals</li>
+                    <li>Payment and budget details</li>
+                    <li>Business/brand information</li>
+                    <li>Performance data (unless you authorize sharing)</li>
+                </ul>
+                <h3>Clipper Network:</h3>
+                <ul>
+                    <li>Our clipper network is proprietary</li>
+                    <li>We do not disclose clipper identities or contact information to clients</li>
+                    <li>Clippers receive brand name and campaign guidelines only</li>
+                </ul>
+                <h3>Non-Disclosure Agreement (NDA):</h3>
+                <ul>
+                    <li>For sensitive campaigns, NDA available upon request</li>
+                    <li>Must be discussed and agreed before campaign launch</li>
+                    <li>Contact us at magnetisemedia.co@gmail.com to discuss NDA requirements</li>
+                    <li>Both parties must sign before any confidential information shared</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>10. Campaign Management</h2>
+                <h3>Before Campaign Launch:</h3>
+                <ul>
+                    <li>You may modify content, guidelines, or budget</li>
+                    <li>No fees for pre-launch modifications</li>
+                    <li>Campaign locked once clippers begin posting</li>
+                </ul>
+                <h3>After Campaign Launch:</h3>
+                <p><strong>You MAY:</strong></p>
+                <ul class="icon-list">
+                    <li><strong>Pause Campaign (with valid reason only)</strong>
+                        <ul style="margin-top:10px; list-style:disc; padding-left:20px;">
+                            <li>Valid reasons: Platform policy changes, content issues, urgent business needs</li>
+                            <li>Pause duration: Maximum 7 days</li>
+                            <li>Budget clock stops during pause</li>
+                        </ul>
+                    </li>
+                    <li><strong>Add New Content (campaign extension)</strong>
+                        <ul style="margin-top:10px; list-style:disc; padding-left:20px;">
+                            <li>Requires additional budget payment</li>
+                            <li>New content follows same approval process</li>
+                        </ul>
+                    </li>
+                    <li><strong>Modify Guidelines (minor adjustments only)</strong>
+                        <ul style="margin-top:10px; list-style:disc; padding-left:20px;">
+                            <li>Example: Tone changes, hashtag updates</li>
+                            <li>Major changes require campaign restart</li>
+                        </ul>
+                    </li>
+                </ul>
+                <p style="margin-top:25px;"><strong>You MAY NOT:</strong></p>
+                <ul class="icon-list icon-list-x">
+                    <li>Reduce budget once campaign active</li>
+                    <li>Remove content already being clipped</li>
+                    <li>Cancel without refund implications (see Refund Policy)</li>
+                    <li>Pause indefinitely</li>
+                </ul>
+                <h3>Budget Options During Campaign:</h3>
+                <ul>
+                    <li>Cannot be reduced</li>
+                    <li>Can be increased for extended reach</li>
+                    <li>Can be stopped (cancellation with refund per policy)</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>11. Disclaimers &amp; Limitations</h2>
+                <h3>We Guarantee:</h3>
+                <ul>
+                    <li>Specific view counts on 70% budget portion</li>
+                    <li>Distribution across verified clipper accounts</li>
+                    <li>Campaign completion or extension until views achieved</li>
+                </ul>
+                <h3>We Do NOT Guarantee:</h3>
+                <ul>
+                    <li>Follower growth or account engagement</li>
+                    <li>Sales, conversions, or leads</li>
+                    <li>Specific engagement rates beyond 0.25% minimum</li>
+                    <li>Viral performance beyond guaranteed views</li>
+                    <li>Clip performance on specific platforms</li>
+                </ul>
+                <h3>Platform Risks:</h3>
+                <ul>
+                    <li>Clippers post on third-party platforms (Instagram, TikTok, YouTube)</li>
+                    <li>Magnetise Media is not responsible if clipper accounts get banned/restricted</li>
+                    <li>Platform algorithm changes may affect performance</li>
+                    <li>We cannot control platform-specific content restrictions</li>
+                    <li>Content may be removed by platforms without our control</li>
+                </ul>
+                <h3>Quality Control:</h3>
+                <ul>
+                    <li>We reject clips with engagement below 0.25%</li>
+                    <li>Only high-performing content counts toward guarantee</li>
+                    <li>This protects your budget from low-quality posts</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>12. Limitation of Liability</h2>
+                <h3>Maximum Liability:</h3>
+                <ul>
+                    <li>Magnetise Media's total liability limited to 70% portion of your campaign budget</li>
+                    <li>30% operational fee never included in liability calculations</li>
+                    <li>We are not liable for indirect, consequential, or punitive damages</li>
+                    <li>This includes lost profits, business opportunities, or reputational harm</li>
+                </ul>
+                <h3>Exclusions:</h3>
+                <ul>
+                    <li>Not liable for delays in payment processing (PayPal/Crypto)</li>
+                    <li>Not liable for third-party platform issues (Instagram outages, etc.)</li>
+                    <li>Not liable for content performance below expectations if guaranteed views met</li>
+                    <li>Not liable for clipper account issues or platform bans</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>13. Account Management</h2>
+                <h3>Account Creation:</h3>
+                <ul>
+                    <li>Created automatically after first campaign payment</li>
+                    <li>Access credentials sent via email</li>
+                    <li>Dashboard access begins at campaign launch</li>
+                </ul>
+                <h3>Account Access:</h3>
+                <ul>
+                    <li>Access to dashboard for duration of campaign + 1 year</li>
+                    <li>Campaign reports downloadable for 1 year after completion</li>
+                    <li>After 1 year, reports and data automatically archived</li>
+                </ul>
+                <h3>Account Closure:</h3>
+                <ul>
+                    <li>Account automatically closes 1 year after last campaign</li>
+                    <li>You may request early closure anytime</li>
+                    <li>All data deleted 60 days after closure (except legal records)</li>
+                    <li>No ongoing subscription or fees</li>
+                </ul>
+                <h3>"Close Your Account" means:</h3>
+                <ul>
+                    <li>Request deletion of dashboard access</li>
+                    <li>Campaign reports will be emailed before deletion</li>
+                    <li>Personal data removed per Privacy Policy</li>
+                    <li>Historical records retained per Indian tax law (6 years)</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>14. Termination</h2>
+                <h3>By You:</h3>
+                <ul>
+                    <li>You may stop campaigns per cancellation policy (Section 6)</li>
+                    <li>You may close account 1 year after last campaign</li>
+                    <li>No penalties for non-renewal</li>
+                </ul>
+                <h3>By Magnetise Media:</h3>
+                <p>We reserve the right to refuse service or terminate campaigns that:</p>
+                <ul>
+                    <li>Violate content guidelines</li>
+                    <li>Involve fraudulent activity</li>
+                    <li>Breach these Terms</li>
+                    <li>Harm our clipper network or reputation</li>
+                    <li>Involve payment disputes or chargebacks</li>
+                </ul>
+                <h3>Effects of Termination:</h3>
+                <ul>
+                    <li>Immediate loss of dashboard access</li>
+                    <li>No refunds on 30% operational fees</li>
+                    <li>Refunds on unused 70% portion per policy</li>
+                    <li>Final report emailed within 14 days</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>15. Dispute Resolution</h2>
+                <h3>Governing Law:</h3>
+                <ul>
+                    <li>These Terms governed by laws of India</li>
+                    <li>Disputes resolved under Indian jurisdiction</li>
+                </ul>
+                <h3>Resolution Process:</h3>
+                <ul>
+                    <li>Email us at magnetisemedia.co@gmail.com to resolve informally</li>
+                    <li>If unresolved within 30 days, proceed to mediation</li>
+                    <li>If mediation fails within 60 days, binding arbitration in India</li>
+                </ul>
+                <h3>Response Time:</h3>
+                <ul>
+                    <li>We respond to dispute emails within 10 business days</li>
+                    <li>Complex disputes may require additional time</li>
+                    <li>You'll receive acknowledgment within 10 days regardless</li>
+                </ul>
+                <h3>No Class Actions:</h3>
+                <ul>
+                    <li>All disputes must be pursued individually</li>
+                    <li>You waive right to participate in class-action lawsuits</li>
+                </ul>
+            </div>
+
+            <div class="terms-section">
+                <h2>16. Changes to Terms</h2>
+                <p>Magnetise Media may update these Terms at any time. Material changes effective 14 days after notification via email. Continued use of services constitutes acceptance of updated Terms.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>17. Contact Information</h2>
+                <ul>
+                    <li>Email: <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration:underline;">magnetisemedia.co@gmail.com</a></li>
+                    <li>Instagram: <a href="https://instagram.com/magnetise.media" target="_blank" style="text-decoration:underline;">@magnetise.media</a></li>
+                    <li>Discord: <a href="https://discord.gg/MvcWBDrmFj" target="_blank" style="text-decoration:underline;">discord.gg/MvcWBDrmFj</a></li>
+                    <li>Response Time: Within 10 business days for all inquiries</li>
+                </ul>
+                <p style="margin-top:28px; font-style:italic; color:#000000; font-family: var(--font-display); font-weight: 600; font-size: 1.20rem;">By working with Magnetise Media , you acknowledge that you have read, understood, and agree to these Terms.</p>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── COPYRIGHT BAR ── -->
+    <div class="footer-bar">
+        <span>© 2026 Magnetise Media. All rights reserved.</span>
+    </div>
+
+<script>
+/* ── 3D Tube Background ── */
+(function(){
+    const s = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+    cam.position.set(0, 0, 12);
+    const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    r.setSize(innerWidth, innerHeight);
+    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const c = r.domElement;
+    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;opacity:0.65;';
+    document.body.appendChild(c);
+    const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime:{value:0} },
+        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        void main(){
+            float flow = sin(vUv.x * 6.28318 + uTime * 1.2) * .5 + .5;
+            float grey = mix(0.015, 0.08, flow);
+            vec3 color = vec3(grey);
+            float fresnel = pow(1. - abs(dot(vNormal, vec3(0,0,1))), 2.);
+            color += vec3(fresnel * 0.025);
+            float alpha = smoothstep(0., .03, vUv.x) * smoothstep(1., .97, vUv.x);
+            gl_FragColor = vec4(color, alpha * .95);
+        }`,
+        transparent: true,
+        side: THREE.DoubleSide
+    });
+    let ribbon, t = 0;
+    function pts(tf){
+        const p = [];
+        for(let i = 0; i < 150; i++){
+            const t2 = i/150;
+            p.push(new THREE.Vector3((t2-.5)*30, Math.sin(t2*Math.PI*2.5+tf*.3)*6, Math.cos(t2*Math.PI*1.2+tf*.2)*3));
+        }
+        return p;
+    }
+    ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)), 150, 2.5, 32, false), mat);
+    s.add(ribbon);
+    s.add(new THREE.AmbientLight(0x222222, 0.25));
+    window.addEventListener('resize', ()=>{
+        cam.aspect = innerWidth/innerHeight;
+        cam.updateProjectionMatrix();
+        r.setSize(innerWidth, innerHeight);
+    });
+    (function loop(){
+        requestAnimationFrame(loop);
+        t += .004;
+        ribbon.geometry.dispose();
+        ribbon.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(t)), 150, 2.5, 32, false);
+        mat.uniforms.uTime.value = t;
+        ribbon.rotation.y = Math.sin(t*.15)*.2;
+        ribbon.rotation.x = Math.cos(t*.1)*.1;
+        cam.position.x = Math.sin(t*.12)*2;
+        cam.position.y = Math.cos(t*.08)*1;
+        cam.lookAt(0,0,0);
+        r.render(s,cam);
+    })();
+})();
+</script>
+</body>
+</html>

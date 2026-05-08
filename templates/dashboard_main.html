@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Dashboard - Magnetise Media</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{background:#0a0a0a;font-family:'Inter',sans-serif;color:#fff;min-height:100vh;overflow-x:hidden;}
+
+        /* ── SIDEBAR ── */
+        .sidebar{
+            position:fixed;top:0;left:0;width:240px;height:100vh;
+            background:#111111;
+            border-right:1px solid rgba(255,255,255,0.07);
+            z-index:200;display:flex;flex-direction:column;
+            padding:24px 0;transition:transform 0.3s ease;
+        }
+        .sidebar.closed{transform:translateX(-100%);}
+
+        .sb-logo{display:flex;align-items:center;padding:0 17px 16px;border-bottom:1px solid rgba(255,255,255,0.07);}
+        .sb-logo img{width:52px;height:52px;margin-right:-7px;filter:brightness(0) invert(1);}
+        .sb-logo span{font-size:19px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;}
+
+        .sb-nav{flex:1;padding:16px 0;}
+        .sb-item{
+            display:flex;align-items:center;gap:12px;
+            padding:11px 20px;cursor:pointer;
+            color:#555;font-size:14px;font-weight:500;
+            transition:all 0.2s;margin:2px 12px;
+            border-radius:10px;border:1px solid transparent;
+        }
+        .sb-item:hover{background:rgba(255,255,255,0.05);color:#ccc;}
+        .sb-item.active{background:rgba(255,255,255,0.08);color:#ffffff;border-color:rgba(255,255,255,0.12);}
+        .sb-item svg{width:18px;height:18px;flex-shrink:0;}
+
+        .sb-bottom{padding:16px 12px;border-top:1px solid rgba(255,255,255,0.07);}
+        .sb-user{padding:10px 8px;margin-bottom:8px;}
+        .sb-user-name{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .sb-user-email{font-size:11px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+
+        .sb-logout{
+            position:relative;display:flex;align-items:center;gap:8px;
+            padding:9px 10px;cursor:pointer;color:#ff5555;
+            font-size:13px;font-weight:600;border-radius:8px;
+            border:1px solid rgba(255,60,60,0.4);overflow:hidden;
+            transition:transform 0.25s,color 0.25s;
+        }
+        .sb-logout::before{content:"";position:absolute;inset:0;background:#ff3b3b;transform:translateX(-100%);transition:transform 0.4s ease;z-index:0;}
+        .sb-logout:hover::before{transform:translateX(0);}
+        .sb-logout:hover{color:#fff;transform:scale(1.02);}
+        .sb-logout svg,.sb-logout span{position:relative;z-index:2;width:16px;height:16px;}
+
+        /* ── MAIN ── */
+        .main-wrap{margin-left:240px;min-height:100vh;position:relative;z-index:10;transition:margin-left 0.3s ease;}
+        .main-wrap.full{margin-left:0;}
+        .page{display:none;padding:40px 36px 60px;}
+        .page.active{display:block;}
+        .page-header{margin-bottom:28px;}
+        .page-header h1{font-size:30px;font-weight:800;color:#fff;letter-spacing:-0.5px;margin-bottom:4px;}
+        .page-header h1 span{color:#ffffff;opacity:0.5;}
+        .page-header p{color:#555;font-size:14px;}
+
+        /* ── TOGGLE BTN ── */
+        .toggle-btn{
+            position:fixed;top:16px;left:248px;z-index:300;
+            width:36px;height:36px;
+            background:#1a1a1a;
+            border:1px solid rgba(255,255,255,0.12);
+            border-radius:8px;display:flex;align-items:center;justify-content:center;
+            cursor:pointer;color:#888;font-size:18px;
+            transition:left 0.3s ease,background 0.2s,color 0.2s;
+        }
+        .toggle-btn:hover{background:rgba(255,255,255,0.1);color:#fff;}
+        .toggle-btn.sidebar-closed{left:12px;}
+
+        /* ── STATUS PILLS ── */
+        .status-pill{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;margin-bottom:24px;}
+        .status-active{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);color:#00cc6a;}
+        .status-completed{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#ccc;}
+        .status-extended{background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);color:#ffb300;}
+        .status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite;}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+        /* ── CARDS ── */
+        .glass{
+            background:#161616;
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:20px;padding:24px 28px;
+        }
+        .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+        .stat-card{
+            background:#161616;border:1px solid rgba(255,255,255,0.08);
+            border-radius:16px;padding:20px 22px;transition:border-color 0.2s;
+        }
+        .stat-card:hover{border-color:rgba(255,255,255,0.2);}
+        .stat-label{color:#555;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+        .stat-value{font-size:24px;font-weight:800;color:#ffffff;}
+        .stat-value.white{color:#fff;}
+        .stat-value.green{color:#00cc6a;}
+        .stat-value.amber{color:#ffb300;}
+
+        /* ── PROGRESS ── */
+        .progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+        .progress-label{font-size:13px;font-weight:600;color:#aaa;}
+        .progress-pct{font-size:13px;font-weight:700;color:#fff;}
+        .progress-bar{height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;}
+        .progress-fill{height:100%;background:linear-gradient(90deg,#ffffff,#aaaaaa);border-radius:4px;transition:width 1.2s cubic-bezier(0.4,0,0.2,1);width:0%;}
+
+        /* ── INFO ── */
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+        .info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+        .info-row:last-child{border-bottom:none;}
+        .info-key{color:#555;font-size:13px;}
+        .info-val{color:#fff;font-size:13px;font-weight:600;}
+        .info-val.cyan{color:#ffffff;}
+        .section-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+        .section-title::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.07);}
+
+        /* ── GRAPH ── */
+        .graph-card{
+            background:#161616;border:1px solid rgba(255,255,255,0.08);
+            border-radius:20px;padding:24px 28px;margin-bottom:20px;
+        }
+        .graph-card canvas{max-height:260px;}
+        .no-graph{text-align:center;padding:32px;color:#555;font-size:13px;}
+
+        /* ── CONTACT ── */
+        .contact-box{
+            background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
+            border-radius:12px;padding:14px 18px;margin-top:16px;
+            display:flex;align-items:center;justify-content:space-between;
+        }
+        .contact-box p{color:#555;font-size:13px;}
+        .contact-box a{color:#aaa;font-size:13px;font-weight:600;text-decoration:none;transition:color 0.2s;}
+        .contact-box a:hover{color:#fff;}
+
+        /* ── PENDING ── */
+        .pending-state{text-align:center;padding:48px 24px;}
+        .pending-icon{width:64px;height:64px;border-radius:50%;background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+        .pending-icon svg{color:#ffb300;width:28px;height:28px;}
+        .pending-state h3{color:#ffb300;font-size:20px;font-weight:700;margin-bottom:8px;}
+        .pending-state p{color:#555;font-size:14px;line-height:1.7;max-width:420px;margin:0 auto;}
+
+        /* ── ACCOUNT ── */
+        .profile-header{display:flex;align-items:center;gap:20px;margin-bottom:28px;}
+        .profile-avatar{
+            width:72px;height:72px;border-radius:50%;
+            background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);
+            display:flex;align-items:center;justify-content:center;
+            font-size:28px;font-weight:800;color:#fff;flex-shrink:0;
+        }
+        .profile-meta h2{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px;}
+        .profile-meta p{font-size:13px;color:#555;}
+        .acc-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;}
+        .acc-stat{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;}
+        .acc-stat-label{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+        .acc-stat-val{font-size:22px;font-weight:800;color:#ffffff;}
+
+        /* ── CAMPAIGNS ── */
+        .campaign-item{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 20px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+        .campaign-item-id{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;}
+        .campaign-item-dates{font-size:12px;color:#555;}
+        .campaign-item-status{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;}
+        .cis-active{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);color:#00cc6a;}
+        .cis-completed{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);color:#ccc;}
+
+        /* ── BTN CHECK PROGRESS ── */
+        .btn-check-progress{
+            position:relative;overflow:hidden;
+            display:inline-flex;align-items:center;gap:6px;
+            background:transparent;border:1px solid rgba(255,255,255,0.15);
+            color:#888;border-radius:8px;padding:7px 14px;
+            font-size:12px;font-weight:600;cursor:pointer;
+            font-family:'Inter',sans-serif;z-index:1;
+            transition:border-color 0.2s,color 0.2s;
+        }
+        .btn-check-progress::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:100%;background:rgba(255,255,255,0.06);transition:left 0.35s ease;z-index:-1;}
+        .btn-check-progress:hover::before{left:0;}
+        .btn-check-progress:hover{border-color:rgba(255,255,255,0.35);color:#fff;}
+
+        /* ── FORM ── */
+        .form-group{margin-bottom:18px;}
+        .form-label{display:block;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+        .form-input{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#fff;font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color 0.2s;}
+        .form-input:focus{border-color:rgba(255,255,255,0.35);}
+        .form-input:disabled{opacity:0.4;cursor:not-allowed;}
+        .form-msg{font-size:13px;margin-top:10px;padding:10px 14px;border-radius:8px;display:none;}
+        .form-msg.success{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);color:#00cc6a;display:block;}
+        .form-msg.error{background:rgba(255,85,85,0.08);border:1px solid rgba(255,85,85,0.2);color:#ff5555;display:block;}
+
+        /* ── BUTTONS (sliding animation kept) ── */
+        .btn-primary{
+            position:relative;overflow:hidden;
+            background:transparent;border:1.5px solid rgba(255,255,255,0.4);
+            color:#fff;border-radius:10px;
+            padding:11px 24px;font-size:14px;font-weight:700;
+            cursor:pointer;font-family:'Inter',sans-serif;z-index:1;
+            transition:color 0.2s,border-color 0.2s;
+        }
+        .btn-primary::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:100%;background:#ffffff;transition:left 0.35s ease;z-index:-1;}
+        .btn-primary:hover::before{left:0;}
+        .btn-primary:hover{color:#000;border-color:#fff;}
+
+        .btn-ghost{
+            background-color:transparent;border:1px solid rgba(255,60,60,0.4);
+            color:#ff5555;font-size:13px;font-weight:600;
+            border-radius:8px;padding:9px 10px;cursor:pointer;
+            font-family:'Inter',sans-serif;transition:transform 0.25s,color 0.25s;
+        }
+        .btn-ghost:hover{transform:scale(1.02);}
+
+        /* ── MODAL ── */
+        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(8px);padding:20px;}
+        .modal-bg.open{display:flex;}
+        .modal-box{
+            background:#151515;
+            border:1px solid rgba(255,255,255,0.1);
+            border-radius:24px;padding:32px;width:100%;max-width:460px;
+            box-shadow:0 24px 64px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+        .modal-title{font-size:17px;font-weight:700;color:#fff;}
+        .modal-close{background:none;border:none;color:#555;cursor:pointer;font-size:28px;line-height:1;padding:4px;transition:color 0.2s;}
+        .modal-close:hover{color:#ff5555;}
+        .modal-link{color:#666;font-size:13px;cursor:pointer;background:none;border:none;font-family:'Inter',sans-serif;text-decoration:none;margin-top:16px;display:inline-block;transition:color 0.2s;}
+        .modal-link:hover{color:#fff;text-decoration:underline;}
+
+        /* ── ANALYTICS ── */
+        .analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+        .chart-card{background:#161616;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:24px 28px;}
+        .chart-card canvas{max-height:260px;}
+        .budget-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+        .budget-part{background:rgba(255,255,255,0.03);border-radius:12px;padding:14px 16px;border:1px solid rgba(255,255,255,0.07);}
+        .budget-part-label{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+        .budget-part-val{font-size:20px;font-weight:800;}
+        .budget-part-sub{font-size:11px;color:#555;margin-top:3px;}
+
+        /* ── CLIPS ── */
+        .clips-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:4px;}
+        .clip-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 18px;transition:border-color 0.2s;}
+        .clip-card:hover{border-color:rgba(255,255,255,0.2);}
+        .clip-platform{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;padding:3px 10px;border-radius:20px;}
+        .clip-platform.instagram{background:rgba(225,48,108,0.1);color:#e1306c;border:1px solid rgba(225,48,108,0.2);}
+        .clip-platform.tiktok{background:rgba(255,255,255,0.06);color:#ccc;border:1px solid rgba(255,255,255,0.12);}
+        .clip-platform.youtube{background:rgba(255,0,0,0.08);color:#ff4444;border:1px solid rgba(255,0,0,0.18);}
+        .clip-views{font-size:22px;font-weight:800;color:#ffffff;margin-bottom:4px;}
+        .clip-views-label{font-size:11px;color:#555;margin-bottom:12px;}
+        .clip-link{
+            position:relative;overflow:hidden;
+            display:inline-flex;align-items:center;gap:5px;
+            font-size:12px;font-weight:600;color:#aaa;
+            text-decoration:none;border:1px solid rgba(255,255,255,0.15);
+            border-radius:7px;padding:6px 12px;z-index:1;
+            transition:color 0.2s,border-color 0.2s;
+        }
+        .clip-link::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:100%;background:rgba(255,255,255,0.07);transition:left 0.3s ease;z-index:-1;}
+        .clip-link:hover::before{left:0;}
+        .clip-link:hover{color:#fff;border-color:rgba(255,255,255,0.35);}
+        .clip-link svg{width:12px;height:12px;}
+        .no-clips{text-align:center;padding:28px 16px;color:#555;font-size:13px;line-height:1.7;}
+
+        /* ── LEADERBOARD ── */
+        .leaderboard-row{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+        .leaderboard-row:last-child{border-bottom:none;}
+        .lb-rank{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#888;flex-shrink:0;}
+        .lb-rank.gold{background:rgba(255,215,0,0.1);border-color:rgba(255,215,0,0.25);color:#ffd700;}
+        .lb-rank.silver{background:rgba(192,192,192,0.08);border-color:rgba(192,192,192,0.2);color:#c0c0c0;}
+        .lb-rank.bronze{background:rgba(205,127,50,0.08);border-color:rgba(205,127,50,0.2);color:#cd7f32;}
+        .lb-name{flex:1;font-size:13px;font-weight:600;color:#fff;}
+        .lb-platform{font-size:11px;color:#555;}
+        .lb-views{font-size:14px;font-weight:800;color:#ffffff;}
+
+        /* ── REPORT ── */
+        .report-box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px 28px;margin-top:20px;display:flex;align-items:center;justify-content:space-between;gap:20px;}
+        .report-box-text h3{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;}
+        .report-box-text p{font-size:13px;color:#555;line-height:1.6;}
+        .btn-download{
+            position:relative;overflow:hidden;
+            display:inline-flex;align-items:center;gap:8px;
+            background:transparent;border:1.5px solid rgba(255,255,255,0.3);
+            color:#ccc;border-radius:10px;padding:10px 22px;
+            font-size:13px;font-weight:700;cursor:pointer;
+            font-family:'Inter',sans-serif;text-decoration:none;
+            white-space:nowrap;z-index:1;transition:color 0.2s,border-color 0.2s;
+        }
+        .btn-download::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:100%;background:#ffffff;transition:left 0.35s ease;z-index:-1;}
+        .btn-download:hover::before{left:0;}
+        .btn-download:hover{color:#000;border-color:#fff;}
+        .btn-download svg{width:15px;height:15px;}
+        .report-unavail{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 18px;margin-top:16px;color:#555;font-size:13px;text-align:center;}
+
+        /* ── TIME FRAME FILTER BTNS ── */
+        .tf-btn{
+            position:relative;overflow:hidden;
+            background:transparent;border:1px solid rgba(255,255,255,0.1);
+            color:#555;border-radius:6px;padding:4px 10px;
+            font-size:11px;font-weight:600;cursor:pointer;
+            font-family:'Inter',sans-serif;z-index:1;
+            transition:border-color 0.2s,color 0.2s;
+        }
+        .tf-btn::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:100%;background:rgba(255,255,255,0.07);transition:left 0.3s ease;z-index:-1;}
+        .tf-btn:hover::before{left:0;}
+        .tf-btn:hover{border-color:rgba(255,255,255,0.3);color:#ccc;}
+        .tf-btn.active{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.25);color:#fff;}
+
+        /* ── SUPPORT / FAQ ── */
+        .faq-item{padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+        .faq-item:last-child{border-bottom:none;}
+        .faq-q{font-size:13px;font-weight:600;color:#fff;margin-bottom:6px;}
+        .faq-a{font-size:13px;color:#555;line-height:1.6;}
+
+        /* ── RESPONSIVE ── */
+        @media(max-width:900px){
+            .sidebar{width:200px;}.main-wrap{margin-left:200px;}
+            .toggle-btn{left:208px;}
+            .stats-grid{grid-template-columns:1fr 1fr;}
+            .info-grid{grid-template-columns:1fr;}
+            .analytics-grid{grid-template-columns:1fr;}
+            .budget-breakdown{grid-template-columns:1fr;}
+        }
+        @media(max-width:640px){
+            .sidebar{width:240px;}
+            .main-wrap{margin-left:0;}
+            .page{padding:60px 16px 40px;}
+            .report-box{flex-direction:column;align-items:flex-start;}
+            .stats-grid{grid-template-columns:1fr 1fr;}
+            .acc-stats{grid-template-columns:1fr;}
+            .info-grid{grid-template-columns:1fr;}
+            .budget-breakdown{grid-template-columns:1fr;}
+            .analytics-grid{grid-template-columns:1fr;}
+        }
+        @media(max-width:400px){
+            .stats-grid{grid-template-columns:1fr;}
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── GREYSCALE ANIMATED TUBE BG ── -->
+<script>
+(function(){
+    const s = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+    cam.position.set(0, 0, 12);
+    const r = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    r.setSize(innerWidth, innerHeight);
+    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const c = r.domElement;
+    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;opacity:0.18;';
+    document.body.appendChild(c);
+
+    const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime: {value:0} },
+        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        fragmentShader: `uniform float uTime;varying vec2 vUv;varying vec3 vNormal;void main(){float flow=sin(vUv.x*6.28318+uTime*1.2)*.5+.5;float grey=mix(0.12,0.72,flow);vec3 color=vec3(grey);float fresnel=pow(1.-abs(dot(vNormal,vec3(0,0,1))),2.);color+=vec3(fresnel*0.28);color+=vec3((sin(vUv.x*12.56+uTime*2.)*.5+.5)*0.08);float alpha=smoothstep(0.,.15,vUv.x)*smoothstep(1.,.85,vUv.x);gl_FragColor=vec4(color,alpha*.92);}`,
+        transparent:true, side:THREE.DoubleSide
+    });
+
+    let ribbon, t = 0;
+    function pts(tf){
+        const p=[];
+        for(let i=0;i<150;i++){const t2=i/150;p.push(new THREE.Vector3((t2-.5)*30,Math.sin(t2*Math.PI*2.5+tf*.3)*6,Math.cos(t2*Math.PI*1.2+tf*.2)*3));}
+        return p;
+    }
+    ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)),150,2.5,32,false), mat);
+    s.add(ribbon);
+    s.add(new THREE.AmbientLight(0xffffff, 0.3));
+    window.addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
+    (function loop(){
+        requestAnimationFrame(loop); t+=.004;
+        ribbon.geometry.dispose();
+        ribbon.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(t)),150,2.5,32,false);
+        mat.uniforms.uTime.value=t;
+        ribbon.rotation.y=Math.sin(t*.15)*.2;
+        ribbon.rotation.x=Math.cos(t*.1)*.1;
+        cam.position.x=Math.sin(t*.12)*2;
+        cam.position.y=Math.cos(t*.08)*1;
+        cam.lookAt(0,0,0);
+        r.render(s,cam);
+    })();
+})();
+</script>
+
+<!-- SIDEBAR TOGGLE -->
+<div class="toggle-btn" id="toggleBtn" onclick="toggleSidebar()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+    <div class="sb-logo">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media">
+        <span>Magnetise Media</span>
+    </div>
+    <nav class="sb-nav">
+        <div class="sb-item active" id="nav-dashboard" onclick="showPage('dashboard',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Dashboard
+        </div>
+        <div class="sb-item" id="nav-analytics" onclick="showPage('analytics',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Analytics
+        </div>
+        <div class="sb-item" id="nav-account" onclick="showPage('account',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Account
+        </div>
+        <div class="sb-item" id="nav-support" onclick="showPage('support',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 5 1c0 1.5-2.5 1.8-2.5 3"/><circle cx="12" cy="17" r="1"/></svg>
+            Support
+        </div>
+    </nav>
+    <div class="sb-bottom">
+        <div class="sb-user">
+            <div class="sb-user-name" id="sbName">—</div>
+            <div class="sb-user-email" id="sbEmail">—</div>
+        </div>
+        <div class="sb-logout" onclick="handleLogout()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span>Logout</span>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main-wrap" id="mainWrap">
+
+    <!-- DASHBOARD PAGE -->
+    <div class="page active" id="page-dashboard">
+        <div class="page-header">
+            <h1>My <span>Dashboard</span></h1>
+            <p>Track your campaign performance in real-time</p>
+        </div>
+        <div id="dashboardContent"><div style="color:#555;padding:40px 0;">Loading...</div></div>
+    </div>
+
+    <!-- ANALYTICS PAGE -->
+    <div class="page" id="page-analytics">
+        <div class="page-header">
+            <h1>My <span>Analytics</span></h1>
+            <p>Detailed performance breakdown</p>
+        </div>
+        <div id="analyticsContent"><div style="color:#555;padding:40px 0;">Loading...</div></div>
+    </div>
+
+    <!-- ACCOUNT PAGE -->
+    <div class="page" id="page-account">
+        <div class="page-header">
+            <h1>My <span>Account</span></h1>
+            <p>Your profile and campaign history</p>
+        </div>
+        <div style="max-width:600px;">
+            <div class="glass" style="margin-bottom:20px;">
+                <div class="profile-header">
+                    <div class="profile-avatar" id="profileAvatar">?</div>
+                    <div class="profile-meta">
+                        <h2 id="profileName">—</h2>
+                        <p id="profileEmail" style="color:#555;font-size:13px;">—</p>
+                    </div>
+                </div>
+                <div class="acc-stats">
+                    <div class="acc-stat">
+                        <div class="acc-stat-label">Total Views Generated</div>
+                        <div class="acc-stat-val" id="accTotalViews">—</div>
+                    </div>
+                    <div class="acc-stat">
+                        <div class="acc-stat-label">Total Spent</div>
+                        <div class="acc-stat-val" id="accTotalSpent">—</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                    <button class="btn-primary" onclick="openModal('pwModal')">Change Password</button>
+                </div>
+            </div>
+            <div class="glass">
+                <div class="section-title">My Campaigns</div>
+                <div id="campaignsList"><div style="color:#555;font-size:13px;">Loading...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SUPPORT PAGE -->
+    <div class="page" id="page-support">
+        <div class="page-header">
+            <h1>Support &amp; <span>Help</span></h1>
+            <p>Get assistance with your campaign</p>
+        </div>
+        <div style="max-width:620px;">
+            <div class="glass" style="margin-bottom:20px;">
+                <div class="section-title">Contact Us</div>
+                <div class="info-row"><span class="info-key">Email</span><a href="mailto:magnetisemedia.co@gmail.com" class="info-val" style="text-decoration:none;color:#aaa;transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#aaa'">magnetisemedia.co@gmail.com</a></div>
+                <div class="info-row"><span class="info-key">Instagram</span><a href="https://instagram.com/magnetise.media" target="_blank" class="info-val" style="text-decoration:none;color:#aaa;transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#aaa'">@magnetise.media</a></div>
+                <div class="info-row"><span class="info-key">Response Time</span><span class="info-val">Within 24 hours</span></div>
+                <div class="info-row" style="border-bottom:none;"><span class="info-key">Discord</span><a href="https://discord.gg/5p3uxnzKjt" target="_blank" class="info-val" style="text-decoration:none;color:#aaa;transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#aaa'">Join Server</a></div>
+            </div>
+            <div class="glass" style="margin-bottom:20px;">
+                <div class="section-title">Quick Actions</div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                    <a href="mailto:magnetisemedia.co@gmail.com?subject=Campaign%20Issue&body=Campaign%20ID:%20" class="btn-primary" style="font-size:13px;padding:10px 20px;text-decoration:none;">Report an Issue</a>
+                    <a href="mailto:magnetisemedia.co@gmail.com?subject=New%20Campaign%20Request" class="btn-primary" style="font-size:13px;padding:10px 20px;text-decoration:none;">Launch New Campaign</a>
+                </div>
+            </div>
+            <div class="glass">
+                <div class="section-title">FAQ</div>
+                <div class="faq-item"><div class="faq-q">How long does a campaign take?</div><div class="faq-a">Campaigns typically run 5–7 days. If the view target is not met, the campaign extends automatically until it is.</div></div>
+                <div class="faq-item"><div class="faq-q">When does the views graph update?</div><div class="faq-a">Your views graph updates every time our team logs new data for your campaign. We update regularly during active campaigns.</div></div>
+                <div class="faq-item"><div class="faq-q">When do top clips appear?</div><div class="faq-a">Only clips with 10,000+ views are shown. They appear automatically once they cross that threshold.</div></div>
+                <div class="faq-item"><div class="faq-q">I forgot my password — what do I do?</div><div class="faq-a">Go to the login page and click "Forgot password?" — You can securely reset your password instantly using email verification.</div></div>
+                <div class="faq-item"><div class="faq-q">How does the refund policy work?</div><div class="faq-a">30% of your budget is a non-refundable operations fee. The remaining 70% is your view guarantee — if views are not delivered after 30 days, you are eligible for a refund on undelivered views.</div></div>
+                <div class="faq-item"><div class="faq-q">My views seem incorrect?</div><div class="faq-a">Contact us at magnetisemedia.co@gmail.com with your Campaign ID and we will investigate right away.</div></div>
+                <div class="faq-item" style="border-bottom:none;"><div class="faq-q">How long do clips stay live?</div><div class="faq-a">Clips remain live for a minimum of 2 months after campaign completion, continuing to accumulate organic views during this period.</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CAMPAIGN ANALYTICS MODAL -->
+<div class="modal-bg" id="campaignAnalyticsModal">
+    <div class="modal-box" style="max-width:640px;max-height:90vh;overflow-y:auto;">
+        <div class="modal-header">
+            <div class="modal-title">Campaign Analytics</div>
+            <button class="modal-close" onclick="closeModal('campaignAnalyticsModal')">×</button>
+        </div>
+        <div id="campaignAnalyticsContent">Loading...</div>
+    </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-bg" id="pwModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div class="modal-title">Change Password</div>
+            <button class="modal-close" onclick="closeModal('pwModal')">×</button>
+        </div>
+        <div class="form-group"><label class="form-label">Current Password</label><input type="password" class="form-input" id="pwCurrent" placeholder="Enter current password"></div>
+        <div class="form-group"><label class="form-label">New Password</label><input type="password" class="form-input" id="pwNew" placeholder="Min 8 characters"></div>
+        <div class="form-group"><label class="form-label">Confirm New Password</label><input type="password" class="form-input" id="pwConfirm" placeholder="Re-enter new password"></div>
+        <div id="pwMsg" class="form-msg"></div>
+        <div style="display:flex;gap:12px;margin-top:4px;">
+            <button class="btn-primary" onclick="submitChangePassword()" style="flex:1;">Update Password</button>
+        </div>
+        <button class="modal-link" onclick="closeModal('pwModal');window.location.href='/forgot-password'">Forgot current password?</button>
+    </div>
+</div>
+
+<script>
+let _dashData=null,_viewsChart=null,_aCharts=[],_sidebarOpen=true;
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function daysElapsed(ds){if(!ds)return'—';const d=Math.floor((Date.now()-new Date(ds).getTime())/86400000);return d>=0?d+' day'+(d!==1?'s':''):'—';}
+function getCampaignStatus(d){if(d.status==='COMPLETED')return'COMPLETED';if(d.status==='ACTIVE'&&d.start_date){const e=Math.floor((Date.now()-new Date(d.start_date).getTime())/86400000);if(e>=30&&(d.current_views||0)<(d.target_views||1))return'EXTENDED';}return'ACTIVE';}
+
+function statusPillHTML(s){
+    if(s==='COMPLETED')return`<span class="status-pill status-completed"><span class="status-dot" style="animation:none;"></span>Campaign Completed</span>`;
+    if(s==='EXTENDED')return`<span class="status-pill status-extended"><span class="status-dot"></span>Campaign Extended — Target Not Yet Met</span>`;
+    return`<span class="status-pill status-active"><span class="status-dot"></span>Campaign Active</span>`;
+}
+
+function platformClass(p){const pl=(p||'').toLowerCase();if(pl.includes('instagram'))return'instagram';if(pl.includes('tiktok'))return'tiktok';return'youtube';}
+
+function toggleSidebar(){
+    const sb=document.getElementById('sidebar'),mw=document.getElementById('mainWrap'),tb=document.getElementById('toggleBtn');
+    _sidebarOpen=!_sidebarOpen;
+    sb.classList.toggle('closed',!_sidebarOpen);
+    mw.classList.toggle('full',!_sidebarOpen);
+    tb.classList.toggle('sidebar-closed',!_sidebarOpen);
+}
+
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+
+function showPage(name,el){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));
+    document.getElementById('page-'+name).classList.add('active');
+    el.classList.add('active');
+    if(name==='analytics'&&_dashData)renderAnalytics(_dashData);
+    if(name==='account'&&_dashData)fillAccount(_dashData);
+}
+
+async function init(){
+    try{
+        const res=await fetch('/api/dashboard/data');
+        const result=await res.json();
+        if(!result.success){showPending();return;}
+        _dashData=result.data;
+        const d=_dashData;
+        document.getElementById('sbName').textContent=d.full_name||'—';
+        document.getElementById('sbEmail').textContent=d.email||'—';
+        if(window.innerWidth<=640){_sidebarOpen=false;document.getElementById('sidebar').classList.add('closed');document.getElementById('mainWrap').classList.add('full');document.getElementById('toggleBtn').classList.add('sidebar-closed');}
+        if(!d.campaign_name){showPending();return;}
+        renderDashboard(d);
+        loadViewsGraph();
+    }catch(e){showPending();}
+}
+
+function renderDashboard(d){
+    const cv=d.current_views||0,tv=d.target_views||1;
+    const pct=Math.min(Math.round((cv/tv)*100),100);
+    const budget=Number(d.budget_total||0);
+    const opsFee=Math.round(budget*0.30);
+    const viewBudget=budget-opsFee;
+    const cs=getCampaignStatus(d);
+    const elapsed=daysElapsed(d.start_date);
+    const isCompleted=cs==='COMPLETED';
+
+    if(isCompleted){
+
+        document.getElementById('dashboardContent').innerHTML = `
+
+            <div class="glass" style="text-align:center;padding:70px 40px;max-width:620px;margin:0 auto;">
+
+                <div style="
+                    width:78px;
+                    height:78px;
+                    border-radius:50%;
+                    background:rgba(255,255,255,0.06);
+                    border:1px solid rgba(255,255,255,0.12);
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    margin:0 auto 24px;
+                ">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M8 12h8"/>
+                    </svg>
+                </div>
+
+                <h2 style="
+                    font-size:26px;
+                    font-weight:800;
+                    color:#fff;
+                    margin-bottom:10px;
+                    letter-spacing:-0.5px;
+                ">
+                    No Active Campaign Found
+                </h2>
+
+                <p style="
+                    color:#666;
+                    font-size:14px;
+                    line-height:1.8;
+                    max-width:440px;
+                    margin:0 auto 30px;
+                ">
+                    Your previous campaign has been completed successfully.
+                    There are currently no active campaigns running on your account.
+                </p>
+
+                <div style="
+                    background:rgba(255,255,255,0.03);
+                    border:1px solid rgba(255,255,255,0.08);
+                    border-radius:16px;
+                    padding:22px;
+                    margin-bottom:26px;
+                ">
+
+                    <div style="
+                        font-size:15px;
+                        font-weight:700;
+                        color:#fff;
+                        margin-bottom:8px;
+                    ">
+                        Want to launch a new campaign?
+                    </div>
+
+                    <a href="mailto:magnetisemedia.co@gmail.com"
+                    style="
+                            color:#aaa;
+                            text-decoration:none;
+                            font-size:14px;
+                            transition:color 0.2s;
+                    "
+                    onmouseover="this.style.color='#fff'"
+                    onmouseout="this.style.color='#aaa'"
+                    >
+                        magnetisemedia.co@gmail.com
+                    </a>
+
+                </div>
+
+                <div style="
+                    display:flex;
+                    justify-content:center;
+                    gap:12px;
+                    flex-wrap:wrap;
+                ">
+
+                    <button class="btn-primary"
+                        onclick="showPage('account',document.getElementById('nav-account'))"
+                        style="font-size:13px;padding:10px 22px;"
+                    >
+                        View Account
+                    </button>
+
+                    <a href="https://discord.gg/5p3uxnzKjt"
+                    target="_blank"
+                    class="btn-primary"
+                    style="font-size:13px;padding:10px 22px;text-decoration:none;"
+                    >
+                        Join Discord
+                    </a>
+
+                </div>
+
+            </div>
+        `;
+
+        return;
+    }
+
+    document.getElementById('dashboardContent').innerHTML=`
+        ${statusPillHTML(cs)}
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-label">Current Views</div><div class="stat-value">${Number(cv).toLocaleString()}</div></div>
+            <div class="stat-card"><div class="stat-label">Target Views</div><div class="stat-value white">${Number(tv).toLocaleString()}</div></div>
+            <div class="stat-card"><div class="stat-label">Days Elapsed</div><div class="stat-value amber">${elapsed}</div></div>
+            <div class="stat-card"><div class="stat-label">Progress</div><div class="stat-value amber">${pct}%</div></div>
+        </div>
+        <div class="glass" style="margin-bottom:20px;">
+            <div class="progress-header"><span class="progress-label">Views progress toward target</span><span class="progress-pct">${pct}%</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+        <div class="graph-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <div class="section-title" style="margin-bottom:0;">Views Over Time</div>
+                <div style="display:flex;gap:6px;">
+                    <button class="tf-btn active" onclick="setGraphTimeFrame(this,7)">7D</button>
+                    <button class="tf-btn" onclick="setGraphTimeFrame(this,15)">15D</button>
+                    <button class="tf-btn" onclick="setGraphTimeFrame(this,30)">30D</button>
+                    <button class="tf-btn" onclick="setGraphTimeFrame(this,null)">All</button>
+                </div>
+            </div>
+            <canvas id="viewsChart"></canvas>
+            <div class="no-graph" id="noGraphMsg" style="display:none;">No history yet — graph will appear once admin updates views.</div>
+        </div>
+        <div class="info-grid">
+            <div class="glass">
+                <div class="section-title">Campaign Details</div>
+                <div class="info-row"><span class="info-key">Campaign Name</span><span class="info-val">${esc(d.campaign_name)}</span></div>
+                <div class="info-row"><span class="info-key">Campaign ID</span><span class="info-val">${esc(d.campaign_id||'—')}</span></div>
+                <div class="info-row"><span class="info-key">Status</span><span class="info-val">${cs.charAt(0)+cs.slice(1).toLowerCase()}</span></div>
+                <div class="info-row"><span class="info-key">Start Date</span><span class="info-val">${esc(d.start_date||'—')}</span></div>
+                <div class="info-row"><span class="info-key">Expected End</span><span class="info-val">${esc(d.expected_end_date||'—')}</span></div>
+                <div class="info-row"><span class="info-key">Days Elapsed</span><span class="info-val">${elapsed}</span></div>
+            </div>
+            <div class="glass">
+                <div class="section-title">Budget Transparency</div>
+                <div class="info-row"><span class="info-key">Total Budget</span><span class="info-val">$${budget.toLocaleString()}</span></div>
+                <div class="budget-breakdown">
+                    <div class="budget-part"><div class="budget-part-label">Ops Fee (30%)</div><div class="budget-part-val" style="color:#ff5555;">$${opsFee.toLocaleString()}</div><div class="budget-part-sub">Non-refundable</div></div>
+                    <div class="budget-part"><div class="budget-part-label">View Guarantee (70%)</div><div class="budget-part-val" style="color:#00cc6a;">$${viewBudget.toLocaleString()}</div><div class="budget-part-sub">Refundable if undelivered</div></div>
+                </div>
+                <div class="info-row" style="margin-top:12px;"><span class="info-key">Views Delivered</span><span class="info-val">${Number(cv).toLocaleString()}</span></div>
+                <div class="info-row"><span class="info-key">Views Remaining</span><span class="info-val">${Math.max(0,tv-cv).toLocaleString()}</span></div>
+            </div>
+        </div>
+        <div id="topClipsSection" style="margin-top:20px;"></div>
+        <div id="clipperLeaderboardSection" style="margin-top:20px;"></div>
+        ${isCompleted
+            ?`<div class="report-box"><div class="report-box-text"><h3>Campaign Report Ready</h3><p>Your campaign is complete. Download your full PDF report.</p></div><a class="btn-download" href="/api/dashboard/report" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Report</a></div>`
+            :`<div class="report-unavail">Campaign report will be available once your campaign is completed.</div>`
+        }
+        <div class="contact-box"><p>Questions about your campaign?</p><a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a></div>
+    `;
+    setTimeout(()=>{const f=document.getElementById('progressFill');if(f)f.style.width=pct+'%';},100);
+    loadTopClips();
+    loadLeaderboard();
+}
+
+async function openCampaignAnalyticsModal(){
+    openModal('campaignAnalyticsModal');
+    const d=_dashData;
+    const cv=d.current_views||0,tv=d.target_views||1;
+    const pct=Math.min(Math.round((cv/tv)*100),100);
+    const budget=Number(d.budget_total||0);
+    const cpm=d.cpm_rate?'$'+Number(d.cpm_rate).toFixed(2):'Not set';
+    const cs=getCampaignStatus(d);
+    document.getElementById('campaignAnalyticsContent').innerHTML=`
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+            <div class="acc-stat"><div class="acc-stat-label">Total Views</div><div class="acc-stat-val">${Number(cv).toLocaleString()}</div></div>
+            <div class="acc-stat"><div class="acc-stat-label">Target</div><div class="acc-stat-val" style="color:#ccc;">${Number(tv).toLocaleString()}</div></div>
+            <div class="acc-stat"><div class="acc-stat-label">Completion</div><div class="acc-stat-val" style="color:#ffb300;">${pct}%</div></div>
+            <div class="acc-stat"><div class="acc-stat-label">Cost/1k Views</div><div class="acc-stat-val" style="color:#00cc6a;">${cpm}</div></div>
+        </div>
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px;margin-bottom:16px;">
+            <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:14px;">Views Over Time</div>
+            <canvas id="accAnalyticsChart" style="max-height:180px;"></canvas>
+            <div id="accNoGraph" style="display:none;text-align:center;padding:20px;color:#555;font-size:13px;">No history data yet.</div>
+        </div>
+        <div class="info-row"><span class="info-key">Budget</span><span class="info-val">$${budget.toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">Ops Fee (30%)</span><span class="info-val" style="color:#ff5555;">$${Math.round(budget*0.30).toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">View Guarantee (70%)</span><span class="info-val" style="color:#00cc6a;">$${Math.round(budget*0.70).toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">Status</span><span class="info-val">${cs}</span></div>
+        <div class="info-row"><span class="info-key">Start Date</span><span class="info-val">${esc(d.start_date||'—')}</span></div>
+        <div class="info-row" style="border-bottom:none;"><span class="info-key">End Date</span><span class="info-val">${esc(d.expected_end_date||'—')}</span></div>
+    `;
+    try{
+        const res=await fetch('/api/dashboard/views-history');
+        const result=await res.json();
+        const history=result.history||[];
+        if(history.length>=1){
+            const labels=history.map(h=>new Date(h.date).toLocaleDateString('en-IN',{month:'short',day:'numeric'}));
+            const values=history.map(h=>h.views);
+            const ctx=document.getElementById('accAnalyticsChart').getContext('2d');
+            const grad=ctx.createLinearGradient(0,0,0,180);
+            grad.addColorStop(0,'rgba(255,255,255,0.15)');
+            grad.addColorStop(1,'rgba(255,255,255,0)');
+            new Chart(ctx,{type:'line',data:{labels,datasets:[{data:values,borderColor:'#ffffff',backgroundColor:grad,borderWidth:2,pointBackgroundColor:'#fff',pointRadius:3,tension:0.4,fill:true}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#555',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{min:0,ticks:{color:'#555',font:{size:10},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}}}});
+        }else{document.getElementById('accAnalyticsChart').style.display='none';document.getElementById('accNoGraph').style.display='';}
+    }catch(e){}
+}
+
+async function loadViewsGraph(days=7){
+    try{
+        const url=days?`/api/dashboard/views-history?days=${days}`:'/api/dashboard/views-history';
+        const res=await fetch(url);
+        const result=await res.json();
+        const history=result.history||[];
+        if(history.length<1){const c=document.getElementById('viewsChart'),m=document.getElementById('noGraphMsg');if(c)c.style.display='none';if(m)m.style.display='';return;}
+        const tv=_dashData?(_dashData.target_views||0):0;
+        const labels=history.map(h=>new Date(h.date).toLocaleDateString('en-IN',{month:'short',day:'numeric'}));
+        const values=history.map(h=>h.views);
+        if(_viewsChart)_viewsChart.destroy();
+        const ctx=document.getElementById('viewsChart');if(!ctx)return;
+        const context=ctx.getContext('2d');
+        const gradient=context.createLinearGradient(0,0,0,ctx.offsetHeight||220);
+        gradient.addColorStop(0,'rgba(255,255,255,0.18)');
+        gradient.addColorStop(0.5,'rgba(255,255,255,0.06)');
+        gradient.addColorStop(1,'rgba(255,255,255,0)');
+        _viewsChart=new Chart(context,{
+            type:'line',
+            data:{labels,datasets:[{label:'Views',data:values,borderColor:'#ffffff',backgroundColor:gradient,borderWidth:2.5,pointBackgroundColor:'#fff',pointBorderColor:'rgba(255,255,255,0.4)',pointBorderWidth:2,pointRadius:5,pointHoverRadius:7,pointHoverBackgroundColor:'#000',pointHoverBorderColor:'#fff',tension:0.4,fill:true}]},
+            options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,callbacks:{label:ctx=>'Views: '+Number(ctx.raw).toLocaleString()}}},scales:{x:{ticks:{color:'#555',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},y:{min:0,max:history.length>1?(tv||undefined):undefined,ticks:{color:'#555',font:{size:11},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'},title:{display:tv>0,text:'Target: '+Number(tv).toLocaleString(),color:'rgba(255,255,255,0.3)',font:{size:10}}}}}
+        });
+    }catch(e){}
+}
+
+function setGraphTimeFrame(btn,days){document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadViewsGraph(days);}
+
+async function loadTopClips(){
+    const section=document.getElementById('topClipsSection');if(!section)return;
+    try{
+        const res=await fetch('/api/dashboard/top-clips');
+        const result=await res.json();
+        const clips=(result.clips||[]).filter(c=>(c.views||0)>=10000);
+        let html=`<div class="glass"><div class="section-title">Top Performing Clips <span style="font-size:11px;font-weight:600;color:#555;margin-left:4px;">(10,000+ views only)</span></div>`;
+        if(clips.length===0){html+=`<div class="no-clips">No clips have reached 10,000+ views yet.<br>They will appear here automatically once they cross that threshold.</div>`;}
+        else{html+=`<div class="clips-grid">`;clips.forEach(c=>{const pc=platformClass(c.platform);html+=`<div class="clip-card"><div class="clip-platform ${pc}">${esc(c.platform||'Unknown')}</div><div class="clip-views">${Number(c.views).toLocaleString()}</div><div class="clip-views-label">views</div><a class="clip-link" href="${esc(c.url)}" target="_blank" rel="noopener">View Clip <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div>`;});html+=`</div>`;}
+        html+=`</div>`;section.innerHTML=html;
+    }catch(e){section.innerHTML='';}
+}
+
+async function loadLeaderboard(){
+    const section=document.getElementById('clipperLeaderboardSection');if(!section)return;
+    try{
+        const res=await fetch('/api/dashboard/leaderboard');
+        const result=await res.json();
+        const rows=result.leaderboard||[];
+        if(rows.length===0){section.innerHTML='';return;}
+        const rc=i=>i===0?'gold':i===1?'silver':i===2?'bronze':'';
+        let html=`<div class="glass"><div class="section-title">Clipper Leaderboard <span style="font-size:11px;font-weight:600;color:#555;margin-left:4px;">Budget transparency</span></div>`;
+        rows.forEach((r,i)=>{html+=`<div class="leaderboard-row"><div class="lb-rank ${rc(i)}">${i+1}</div><div><div class="lb-name">${esc(r.clipper_name||'Clipper #'+(i+1))}</div><div class="lb-platform">${esc(r.platform||'')}</div></div><div class="lb-views">${Number(r.views||0).toLocaleString()} views</div></div>`;});
+        html+=`</div>`;section.innerHTML=html;
+    }catch(e){section.innerHTML='';}
+}
+
+async function renderAnalytics(d){
+    const cv=d.current_views||0,tv=d.target_views||1,pct=Math.min(Math.round((cv/tv)*100),100);
+    const cpm=d.cpm_rate?Number(d.cpm_rate).toFixed(2):'—';
+    const budget=Number(d.budget_total||0);
+    const cs=getCampaignStatus(d);
+    if(cs==='COMPLETED'){
+
+        document.getElementById('analyticsContent').innerHTML = `
+
+            <div class="glass"
+                style="
+                    text-align:center;
+                    padding:60px 36px;
+                    max-width:560px;
+                    margin:0 auto;
+                ">
+
+                <h2 style="
+                    font-size:22px;
+                    font-weight:800;
+                    color:#fff;
+                    margin-bottom:12px;
+                ">
+                    No Active Campaign Analytics
+                </h2>
+
+                <p style="
+                    color:#666;
+                    font-size:14px;
+                    line-height:1.8;
+                    margin-bottom:28px;
+                ">
+                    Your previous campaign has ended.
+                    Analytics will appear here once a new campaign starts.
+                </p>
+
+                <div style="
+                    background:rgba(255,255,255,0.03);
+                    border:1px solid rgba(255,255,255,0.08);
+                    border-radius:14px;
+                    padding:18px;
+                ">
+
+                    <div style="
+                        font-size:14px;
+                        font-weight:700;
+                        color:#fff;
+                        margin-bottom:6px;
+                    ">
+                        Launch another campaign
+                    </div>
+
+                    <a href="mailto:magnetisemedia.co@gmail.com"
+                    style="
+                            color:#aaa;
+                            text-decoration:none;
+                            font-size:13px;
+                    ">
+                        magnetisemedia.co@gmail.com
+                    </a>
+
+                </div>
+
+            </div>
+        `;
+
+        return;
+    }
+        document.getElementById('analyticsContent').innerHTML=`
+
+            ${statusPillHTML(cs)}
+
+            <div class="analytics-grid">
+
+                <div class="chart-card">
+
+                    <div class="section-title">Campaign Performance</div>
+
+                    <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
+
+                        <div class="stat-card">
+                            <div class="stat-label">Views Generated</div>
+                            <div class="stat-value">${Number(cv).toLocaleString()}</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-label">Completion Rate</div>
+                            <div class="stat-value amber">${pct}%</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-label">CPM Rate</div>
+                            <div class="stat-value green">$${cpm}</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-label">Budget</div>
+                            <div class="stat-value white">$${budget.toLocaleString()}</div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="chart-card">
+
+                    <div class="section-title">Campaign Summary</div>
+
+                    <div class="info-row">
+                        <span class="info-key">Campaign Name</span>
+                        <span class="info-val">${esc(d.campaign_name||'—')}</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-key">Campaign Status</span>
+                        <span class="info-val">${cs}</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-key">Target Views</span>
+                        <span class="info-val">${Number(tv).toLocaleString()}</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-key">Current Views</span>
+                        <span class="info-val">${Number(cv).toLocaleString()}</span>
+                    </div>
+
+                    <div class="info-row" style="border-bottom:none;">
+                        <span class="info-key">Expected End</span>
+                        <span class="info-val">${esc(d.expected_end_date||'—')}</span>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="graph-card">
+
+                <div class="section-title">Performance Graph</div>
+
+                <canvas id="analyticsMainChart"></canvas>
+
+            </div>
+
+        `;
+
+        try{
+
+            const res = await fetch('/api/dashboard/views-history');
+            const result = await res.json();
+
+            const history = result.history || [];
+
+            if(history.length > 0){
+
+                const labels = history.map(h =>
+                    new Date(h.date).toLocaleDateString('en-IN',{
+                        month:'short',
+                        day:'numeric'
+                    })
+                );
+
+                const values = history.map(h => h.views);
+
+                const ctx = document
+                    .getElementById('analyticsMainChart')
+                    .getContext('2d');
+
+                const gradient = ctx.createLinearGradient(0,0,0,260);
+
+                gradient.addColorStop(0,'rgba(255,255,255,0.18)');
+                gradient.addColorStop(1,'rgba(255,255,255,0)');
+
+                new Chart(ctx,{
+                    type:'line',
+                    data:{
+                        labels,
+                        datasets:[{
+                            data:values,
+                            borderColor:'#ffffff',
+                            backgroundColor:gradient,
+                            fill:true,
+                            tension:0.4,
+                            borderWidth:2.5,
+                            pointRadius:4,
+                            pointBackgroundColor:'#fff'
+                        }]
+                    },
+                    options:{
+                        responsive:true,
+                        plugins:{
+                            legend:{display:false}
+                        },
+                        scales:{
+                            x:{
+                                ticks:{color:'#555'},
+                                grid:{color:'rgba(255,255,255,0.04)'}
+                            },
+                            y:{
+                                ticks:{
+                                    color:'#555',
+                                    callback:v=>Number(v).toLocaleString()
+                                },
+                                grid:{color:'rgba(255,255,255,0.04)'}
+                            }
+                        }
+                    }
+                });
+
+            }
+
+        }catch(e){}
+
+    }
+
+function fillAccount(d){
+    const initials=(d.full_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('profileAvatar').textContent=initials;
+    document.getElementById('profileName').textContent=d.full_name||'—';
+    document.getElementById('profileEmail').textContent=d.email||'—';
+    document.getElementById('accTotalViews').textContent=Number(d.current_views||0).toLocaleString();
+    document.getElementById('accTotalSpent').textContent=d.budget_total?'$'+Number(d.budget_total).toLocaleString():'—';
+    const cl=document.getElementById('campaignsList');
+    if(!d.campaign_id){cl.innerHTML='<div style="color:#555;font-size:13px;">No campaigns yet.</div>';return;}
+    const cs=getCampaignStatus(d);
+    const statusClass=cs==='COMPLETED'?'cis-completed':'cis-active';
+    const isCompleted=cs==='COMPLETED';
+    const cv=d.current_views||0,tv=d.target_views||1;
+    const pct=Math.min(Math.round((cv/tv)*100),100);
+    const budget=Number(d.budget_total||0);
+    cl.innerHTML=`
+        <div class="campaign-item" style="flex-direction:column;align-items:flex-start;gap:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <div class="campaign-item-id">${esc(d.campaign_id)}</div>
+                    <div class="campaign-item-dates">${esc(d.campaign_name||'')} &nbsp;·&nbsp; ${esc(d.start_date||'')} → ${esc(d.expected_end_date||'')}</div>
+                </div>
+                <span class="campaign-item-status ${statusClass}">${cs.charAt(0)+cs.slice(1).toLowerCase()}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;">
+                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
+                    <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Views</div>
+                    <div style="font-size:18px;font-weight:800;color:#fff;">${Number(cv).toLocaleString()}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
+                    <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Progress</div>
+                    <div style="font-size:18px;font-weight:800;color:#ffb300;">${pct}%</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
+                    <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Budget</div>
+                    <div style="font-size:18px;font-weight:800;color:#00cc6a;">$${budget.toLocaleString()}</div>
+                </div>
+            </div>
+            <div style="width:100%;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                    <span style="font-size:11px;color:#555;">Views toward target</span>
+                    <span style="font-size:11px;font-weight:700;color:#fff;">${Number(cv).toLocaleString()} / ${Number(tv).toLocaleString()}</span>
+                </div>
+                <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#ffffff,#888888);border-radius:3px;transition:width 1s ease;"></div>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${isCompleted?`<a class="btn-check-progress" href="/api/dashboard/report" target="_blank"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Report</a>`:''}
+                <button class="btn-check-progress" onclick="openCampaignAnalyticsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>View Analytics</button>
+            </div>
+        </div>
+    `;
+}
+
+async function submitChangePassword(){
+    const current=document.getElementById('pwCurrent').value.trim();
+    const newPw=document.getElementById('pwNew').value.trim();
+    const confirm=document.getElementById('pwConfirm').value.trim();
+    const msg=document.getElementById('pwMsg');
+    msg.className='form-msg';msg.style.display='none';
+    if(!current||!newPw||!confirm){msg.textContent='All fields required.';msg.className='form-msg error';return;}
+    if(newPw.length<8){msg.textContent='New password must be at least 8 characters.';msg.className='form-msg error';return;}
+    if(newPw!==confirm){msg.textContent='Passwords do not match.';msg.className='form-msg error';return;}
+    try{
+        const res=await fetch('/api/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_password:current,new_password:newPw})});
+        const data=await res.json();
+        if(data.success){msg.textContent='Password updated successfully!';msg.className='form-msg success';document.getElementById('pwCurrent').value='';document.getElementById('pwNew').value='';document.getElementById('pwConfirm').value='';}
+        else{msg.textContent=data.message||'Error updating password.';msg.className='form-msg error';}
+    }catch(e){msg.textContent='Connection error.';msg.className='form-msg error';}
+}
+
+function showPending(){
+    document.getElementById('sbEmail').textContent='{{ email }}';
+    document.getElementById('dashboardContent').innerHTML=`<div class="glass"><div class="pending-state"><div class="pending-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h3>Campaign Pending</h3><p>Your account is set up but your campaign has not been created yet. Our team will reach out soon to get things started.</p><div class="contact-box" style="margin-top:24px;"><p>Need help?</p><a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a></div></div></div>`;
+}
+
+async function handleLogout(){
+    try{await fetch('/api/auth/logout',{method:'POST'});}catch(e){}
+    window.location.href='/client-login';
+}
+
+document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
+init();
+</script>
+</body>
+</html>

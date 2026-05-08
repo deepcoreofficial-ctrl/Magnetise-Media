@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Magnetise Media</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0a0a0a;
+            --card: #161616;
+
+            --border: rgba(255,255,255,0.08);
+            --border-hover: rgba(255,255,255,0.2);
+
+            --cyan: #ffffff;
+            --cyan-dim: rgba(255,255,255,0.07);
+
+            --text: #ffffff;
+            --muted: #8a9aaa;
+
+            --amber: #ffffff;
+            --amber-dim: rgba(255,255,255,0.07);
+
+            --green: #ffffff;
+            --green-dim: rgba(255,255,255,0.07);
+
+            --red: #ff5555;
+            --red-dim: rgba(255,85,85,0.1);
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: rgba(0,0,0,0.7);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(18px);
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #fff;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .nav-logo img {
+            width: 36px;
+            height: 36px;
+        }
+
+        .admin-pill {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            padding: 4px 12px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .06em;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-email {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid rgba(255,85,85,0.4);
+            color: var(--red);
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all .2s ease;
+        }
+
+        .logout-btn:hover {
+            background: var(--red-dim);
+        }
+
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4,1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 22px;
+            backdrop-filter: blur(20px);
+            transition: border-color .2s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 30px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge-count,
+        .badge-count.cyan {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #fff;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .table-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead tr {
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        thead th {
+            padding: 16px 20px;
+            text-align: left;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background .15s ease;
+        }
+
+        tbody tr:last-child { border-bottom: none; }
+
+        tbody tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        tbody td {
+            padding: 18px 20px;
+            font-size: 14px;
+            color: #fff;
+        }
+
+        .td-muted {
+            color: var(--muted);
+        }
+
+        .td-email {
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255,255,255,0.06);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* All action buttons — solid white pill style */
+        .btn-sm {
+            position: relative;
+            overflow: hidden;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            border: 1.5px solid rgba(255,255,255,0.35);
+            background: transparent;
+            color: #fff;
+            transition: all .2s ease;
+            z-index: 1;
+        }
+
+        .btn-sm::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.12);
+            opacity: 0;
+            transition: opacity .2s ease;
+            z-index: -1;
+        }
+
+        .btn-sm:hover::before { opacity: 1; }
+        .btn-sm:hover { border-color: rgba(255,255,255,0.6); transform: translateY(-1px); }
+
+        .btn-modal-primary {
+            flex: 1;
+            background: #fff;
+            border: none;
+            color: #000;
+            border-radius: 10px;
+            padding: 13px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all .2s ease;
+        }
+
+        .btn-modal-primary:hover { opacity: .88; transform: translateY(-1px); }
+        .btn-modal-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+        .btn-modal-cancel {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.12);
+            color: var(--muted);
+            border-radius: 10px;
+            padding: 13px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all .2s ease;
+        }
+
+        .btn-modal-cancel:hover {
+            border-color: rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(6px);
+            padding: 20px;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: rgba(18,18,18,0.98);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 36px;
+            width: 100%;
+            max-width: 520px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.7);
+            backdrop-filter: blur(20px);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .modal-title {
+            color: #fff;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 22px;
+            line-height: 1;
+            padding: 4px;
+        }
+
+        .modal-close:hover { color: #fff; }
+
+        .modal-client-info {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 24px;
+        }
+
+        .modal-client-info p { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+        .modal-client-info p:last-child { margin-bottom: 0; }
+        .modal-client-info strong { color: #fff; }
+
+        .field {
+            margin-bottom: 18px;
+        }
+
+        .field label {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .field input,
+        .field textarea {
+            width: 100%;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #fff;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            transition: .2s ease;
+        }
+
+        .field input::placeholder, .field textarea::placeholder { color: rgba(255,255,255,0.3); }
+
+        .field input:focus,
+        .field textarea:focus {
+            outline: none;
+            border-color: rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.06);
+        }
+
+        .field textarea {
+            resize: vertical;
+            min-height: 90px;
+        }
+
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .pw-section {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 18px;
+        }
+
+        .pw-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+        }
+
+        .pw-generated {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 10px;
+        }
+
+        .pw-generated span {
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            color: #fff;
+            flex: 1;
+            letter-spacing: 1px;
+        }
+
+        .btn-regen {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all .2s;
+            white-space: nowrap;
+        }
+
+        .btn-regen:hover { background: rgba(255,255,255,0.08); }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .msg-box {
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+            line-height: 1.5;
+        }
+
+        .msg-box.error {
+            background: rgba(255,68,68,0.08);
+            border: 1px solid rgba(255,68,68,0.4);
+            color: #ff8080;
+        }
+
+        .msg-box.success {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+        }
+
+        .success-state {
+            text-align: center;
+            padding: 16px 0;
+        }
+
+        .success-state .success-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+
+        .success-state h3 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+        .success-state p { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+
+        .creds-box {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 16px 0;
+            text-align: left;
+        }
+
+        .creds-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+        .creds-label { color: var(--muted); font-size: 12px; }
+        .creds-value { color: #fff; font-size: 13px; font-weight: 600; font-family: 'Courier New', monospace; }
+
+        .empty-state, .loading {
+            text-align: center;
+            padding: 42px 24px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .empty-state svg { width: 40px; height: 40px; margin-bottom: 12px; opacity: .4; }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(18,18,18,0.98);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 20px;
+            color: #fff;
+            font-size: 14px;
+            z-index: 9999;
+            transform: translateY(80px);
+            opacity: 0;
+            transition: all .3s ease;
+            max-width: 320px;
+            backdrop-filter: blur(20px);
+        }
+
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        @media (max-width: 768px) {
+            .stats-row { grid-template-columns: 1fr 1fr; }
+            .field-row { grid-template-columns: 1fr; }
+            .navbar { padding: 0 16px; }
+            .main { padding: 20px 16px; }
+        }
+
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="nav-left">
+        <div class="nav-logo">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media">
+            <span>Magnetise Media</span>
+        </div>
+        <div class="admin-pill">ADMIN</div>
+    </div>
+    <div class="nav-right">
+        <span class="nav-email" id="adminEmailDisplay"></span>
+        <button class="logout-btn" onclick="doLogout()">Logout</button>
+    </div>
+</nav>
+
+<div class="main">
+    <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Pending Signups</div><div class="stat-value amber" id="statPending">—</div></div>
+        <div class="stat-card"><div class="stat-label">Active Campaigns</div><div class="stat-value cyan" id="statActive">—</div></div>
+        <div class="stat-card"><div class="stat-label">Total Clients</div><div class="stat-value" id="statTotal">—</div></div>
+        <div class="stat-card"><div class="stat-label">Completed</div><div class="stat-value green" id="statCompleted">—</div></div>
+    </div>
+
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">Pending Signups <span class="badge-count" id="pendingBadge">0</span></div>
+        </div>
+        <div class="table-card">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Name</th><th>Email</th><th>Signed Up</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="pendingTableBody"><tr><td colspan="5"><div class="loading">Loading...</div></td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">All Clients <span class="badge-count cyan" id="clientsBadge">0</span></div>
+        </div>
+        <div class="table-card">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Name</th><th>Email</th><th>Campaign</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="clientsTableBody"><tr><td colspan="5"><div class="loading">Loading...</div></td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CAMPAIGN MODAL -->
+<div class="modal-overlay" id="campaignModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Create Campaign</div>
+            <button class="modal-close" onclick="closeModal('campaignModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="campaignClientInfo"></div>
+        <div id="campaignForm">
+            <div class="field"><label>Campaign Name</label><input type="text" id="campaignName" placeholder="e.g. Product Launch Q1"/></div>
+            <div class="field-row">
+                <div class="field"><label>Budget ($)</label><input type="number" id="campaignBudget" placeholder="1000"/></div>
+                <div class="field"><label>Target Views</label><input type="number" id="campaignViews" placeholder="300000"/></div>
+            </div>
+            <div class="field-row">
+                <div class="field"><label>Start Date</label><input type="date" id="campaignStart"/></div>
+                <div class="field"><label>End Date</label><input type="date" id="campaignEnd"/></div>
+            </div>
+            <div class="pw-section">
+                <div class="pw-section-title">Client Password</div>
+                <div class="pw-generated"><span id="generatedPw"></span><button class="btn-regen" onclick="generatePassword()">Regenerate</button></div>
+                <div class="field" style="margin-bottom:0;"><label>Custom Password (optional)</label><input type="text" id="customPw" placeholder="Leave empty to use generated"/></div>
+            </div>
+            <div id="campaignMsgBox" class="msg-box"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="closeModal('campaignModal')">Cancel</button>
+                <button class="btn-modal-primary" id="createCampaignBtn" onclick="submitCampaign()">Create Campaign</button>
+            </div>
+        </div>
+        <div class="success-state" id="campaignSuccess" style="display:none;">
+            <div class="success-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <h3>Campaign Created</h3>
+            <p>Login credentials are ready to send.</p>
+            <div class="creds-box" id="credsDisplay"></div>
+            <div class="modal-actions" style="margin-top:16px;">
+                <button class="btn-modal-cancel" onclick="closeModal('campaignModal');loadData();">Close</button>
+                <button class="btn-modal-primary" onclick="openSendEmailModal()">Send to Client</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div class="modal-overlay" id="rejectModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <div class="modal-title">Reject Signup</div>
+            <button class="modal-close" onclick="closeModal('rejectModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="rejectClientInfo"></div>
+        <div class="field"><label>Reason (Optional)</label><textarea id="rejectReason" placeholder="Why are you rejecting?"></textarea></div>
+        <div id="rejectMsgBox" class="msg-box"></div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModal('rejectModal')">Cancel</button>
+            <button class="btn-modal-primary" style="background:var(--red);color:#fff;" onclick="submitReject()" id="rejectBtn">Reject</button>
+        </div>
+    </div>
+</div>
+
+<!-- EMAIL MODAL -->
+<div class="modal-overlay" id="emailModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Send Login Details</div>
+            <button class="modal-close" onclick="closeModal('emailModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="emailPreviewBox"></div>
+        <div id="emailMsgBox" class="msg-box"></div>
+        <div id="emailFormSection">
+            <div class="field" id="passwordFieldWrapper">
+                <label>Client Password <span style="color:#aaa;font-size:11px;">(will be included in email)</span></label>
+                <input type="text" id="emailPasswordInput" placeholder="Enter the client's password" style="font-family:monospace;letter-spacing:0.05em;"/>
+            </div>
+            <div class="field"><label>Email Preview</label>
+                <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:13px;color:var(--muted);line-height:1.8;white-space:pre-wrap;" id="emailPreviewContent"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="closeModal('emailModal')">Cancel</button>
+                <button class="btn-modal-primary" id="sendEmailBtn" onclick="submitSendEmail()">Send Email</button>
+            </div>
+        </div>
+        <div class="success-state" id="emailSuccess" style="display:none;">
+            <div class="success-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <h3>Email Sent</h3>
+            <p id="emailSentTo"></p>
+            <button class="btn-modal-primary" style="margin-top:16px;" onclick="closeModal('emailModal');loadData();">Back to Dashboard</button>
+        </div>
+    </div>
+</div>
+
+<!-- UPDATE VIEWS MODAL -->
+<div class="modal-overlay" id="updateViewsModal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <div class="modal-title">Update Views</div>
+            <button class="modal-close" onclick="closeModal('updateViewsModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="updateViewsInfo"></div>
+        <div id="updateViewsForm">
+            <div class="form-group" style="margin-top:16px;">
+                <label class="form-label" style="display:block;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Current Views</label>
+                <input type="number" id="viewsInput" class="field" placeholder="Enter new view count" min="0" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 14px;color:#fff;font-size:20px;font-weight:700;font-family:'Inter',sans-serif;">
+            </div>
+            <div id="viewsProgress" style="margin:12px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="closeModal('updateViewsModal')">Cancel</button>
+                <button class="btn-modal-primary" id="updateViewsBtn" onclick="submitUpdateViews()">Update Views</button>
+            </div>
+        </div>
+        <div id="updateViewsDone" style="display:none;text-align:center;padding:12px 0;">
+            <div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:12px;">Views updated!</div>
+            <button class="btn-modal-primary" style="margin-top:4px;" onclick="closeModal('updateViewsModal');loadData();">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- SET CPM MODAL -->
+<div class="modal-overlay" id="setCpmModal">
+    <div class="modal" style="max-width:380px;">
+        <div class="modal-header">
+            <div class="modal-title">Set Pay Rate</div>
+            <button class="modal-close" onclick="closeModal('setCpmModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="setCpmInfo"></div>
+        <div class="field" style="margin-top:16px;">
+            <label>Cost per 1,000 Views ($)</label>
+            <input type="number" id="cpmInput" placeholder="e.g. 7.50" step="0.01" min="0"
+                   style="font-size:20px;font-weight:700;color:#fff;"/>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">
+            This is the rate shown to the client on their Analytics page. It does not affect billing.
+        </p>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModal('setCpmModal')">Cancel</button>
+            <button class="btn-modal-primary" id="setCpmBtn" onclick="submitSetCpm()">Save Rate</button>
+        </div>
+    </div>
+</div>
+
+<!-- MARK COMPLETE MODAL -->
+<div class="modal-overlay" id="markCompleteModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <div class="modal-title">Mark Campaign Complete</div>
+            <button class="modal-close" onclick="closeModal('markCompleteModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="markCompleteInfo"></div>
+        <div id="markCompleteForm">
+            <p style="color:var(--muted);font-size:14px;margin:16px 0 8px;">This will mark the campaign as <strong style="color:#fff;">COMPLETED</strong> and the client will no longer see an active campaign.</p>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="closeModal('markCompleteModal')">Cancel</button>
+                <button class="btn-modal-primary" id="markCompleteBtn" onclick="submitMarkComplete()">Mark Complete</button>
+            </div>
+        </div>
+        <div id="markCompleteDone" style="display:none;text-align:center;padding:12px 0;">
+            <div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:12px;">Campaign marked complete!</div>
+            <button class="btn-modal-primary" style="margin-top:4px;" onclick="closeModal('markCompleteModal');loadData();">Done</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// THREE.JS RIBBON BG — greyscale/white
+let scene, camera, renderer, ribbon, time = 0;
+function init3D() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 12);
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, precision: 'highp' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const c = renderer.domElement;
+    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;';
+    document.body.appendChild(c);
+    const mat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime:  { value: 0 },
+            uBlue1: { value: new THREE.Color(0x2a2a2a) },
+            uBlue2: { value: new THREE.Color(0x444444) },
+            uCyan:  { value: new THREE.Color(0x888888) },
+            uDark:  { value: new THREE.Color(0x0a0a0a) }
+        },
+        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        fragmentShader: `uniform float uTime;uniform vec3 uBlue1,uBlue2,uCyan,uDark;varying vec2 vUv;varying vec3 vNormal;void main(){float flow=sin(vUv.x*6.28318+uTime*1.2)*.5+.5;vec3 color=mix(uDark,uBlue1,vUv.x);color=mix(color,uBlue2,flow);color=mix(color,uCyan,pow(flow,2.)*.6);float fresnel=pow(1.-abs(dot(vNormal,vec3(0,0,1))),2.);color+=uCyan*fresnel*.5;float rg=pow(1.-abs(vUv.y*2.-1.),1.5);color+=vec3(rg*.25);color+=uCyan*(sin(vUv.x*12.56+uTime*2.)*.5+.5)*.15;float alpha=smoothstep(0.,.15,vUv.x)*smoothstep(1.,.85,vUv.x);gl_FragColor=vec4(color,alpha*.9);}`,
+        transparent: true, side: THREE.DoubleSide
+    });
+    function pts(t){const p=[];for(let i=0;i<150;i++){const t2=i/150;p.push(new THREE.Vector3((t2-.5)*30,Math.sin(t2*Math.PI*2.5+t*.3)*6,Math.cos(t2*Math.PI*1.2+t*.2)*3));}return p;}
+    ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)),150,2.5,32,false), mat);
+    scene.add(ribbon);
+    scene.add(new THREE.AmbientLight(0x111111, 1));
+    const l1 = new THREE.PointLight(0x555555, 2, 25); l1.position.set(-8,5,8); scene.add(l1);
+    const l2 = new THREE.PointLight(0x888888, 1.5, 25); l2.position.set(8,-5,8); scene.add(l2);
+    window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);});
+    (function loop(){requestAnimationFrame(loop);time+=.004;ribbon.geometry.dispose();ribbon.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(time)),150,2.5,32,false);ribbon.material.uniforms.uTime.value=time;ribbon.rotation.y=Math.sin(time*.15)*.2;ribbon.rotation.x=Math.cos(time*.1)*.1;camera.position.x=Math.sin(time*.12)*2;camera.position.y=Math.cos(time*.08)*1;camera.lookAt(0,0,0);renderer.render(scene,camera);})();
+}
+init3D();
+
+// ADMIN LOGIC
+let currentClient = null, lastCampaignData = null;
+
+document.addEventListener('DOMContentLoaded', () => { checkAdmin(); setTodayDate(); generatePassword(); });
+
+async function checkAdmin() {
+    try {
+        const res = await fetch('/api/admin/check');
+        if (!res.ok) { window.location.href = '/admin'; return; }
+        const data = await res.json();
+        if (!data.authenticated) { window.location.href = '/admin'; return; }
+        document.getElementById('adminEmailDisplay').textContent = data.email || '';
+        loadData();
+    } catch { window.location.href = '/admin'; }
+}
+
+async function loadData() { loadPending(); loadAllClients(); loadStats(); }
+
+async function loadStats() {
+    try {
+        const res = await fetch('/api/admin/stats');
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('statPending').textContent = data.pending ?? 0;
+            document.getElementById('statActive').textContent = data.active ?? 0;
+            document.getElementById('statTotal').textContent = data.total ?? 0;
+            document.getElementById('statCompleted').textContent = data.completed ?? 0;
+        }
+    } catch {}
+}
+
+async function loadPending() {
+    const tbody = document.getElementById('pendingTableBody');
+    try {
+        const res = await fetch('/api/admin/pending');
+        const data = await res.json();
+        const users = data.users || [];
+        document.getElementById('pendingBadge').textContent = users.length;
+        if (users.length === 0) { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><p>No pending signups</p></div></td></tr>`; return; }
+        tbody.innerHTML = users.map(u => `<tr>
+            <td><strong>${esc(u.full_name)}</strong></td>
+            <td class="td-email">${esc(u.email)}</td>
+            <td class="td-muted">${formatDate(u.created_at)}</td>
+            <td><span class="status status-pending"><span class="status-dot"></span>Pending</span></td>
+            <td><div class="action-btns">
+                <button class="btn-sm btn-create" onclick="openCampaignModal('${esc(u.user_id)}','${esc(u.full_name)}','${esc(u.email)}')">Create Campaign</button>
+                <button class="btn-sm btn-reject" onclick="openRejectModal('${esc(u.user_id)}','${esc(u.full_name)}','${esc(u.email)}')">Reject</button>
+            </div></td>
+        </tr>`).join('');
+    } catch { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Error loading data</p></div></td></tr>`; }
+}
+
+async function loadAllClients() {
+    const tbody = document.getElementById('clientsTableBody');
+    try {
+        const res = await fetch('/api/admin/clients');
+        const data = await res.json();
+        const clients = data.clients || [];
+        document.getElementById('clientsBadge').textContent = clients.length;
+        if (clients.length === 0) { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No clients yet</p></div></td></tr>`; return; }
+        tbody.innerHTML = clients.map(c => {
+            const sc = c.account_status === 'ACTIVE_CAMPAIGN' ? 'status-active' : c.account_status === 'REJECTED' ? 'status-rejected' : 'status-pending';
+            const sl = c.account_status === 'ACTIVE_CAMPAIGN' ? 'Active' : c.account_status === 'REJECTED' ? 'Rejected' : 'Pending';
+            return `<tr>
+                <td><strong>${esc(c.full_name)}</strong></td>
+                <td class="td-email">${esc(c.email)}</td>
+                <td class="td-muted">${c.campaign_name ? esc(c.campaign_name) : '—'}</td>
+                <td><span class="status ${sc}"><span class="status-dot"></span>${sl}</span></td>
+                <td><div class="action-btns">
+                    ${c.account_status==='PENDING'?`<button class="btn-sm btn-create" onclick="openCampaignModal('${esc(c.user_id)}','${esc(c.full_name)}','${esc(c.email)}')">Create Campaign</button>`:''}
+                    ${c.account_status==='ACTIVE_CAMPAIGN'&&!c.email_sent?`<button class="btn-sm btn-send" onclick="openSendEmailFromClient('${esc(c.email)}','${esc(c.full_name)}')">Send Details</button>`:''}
+                    ${c.account_status==='ACTIVE_CAMPAIGN'?`<button class="btn-sm btn-view" onclick="openUpdateViews('${esc(c.campaign_id)}','${esc(c.full_name)}',${c.current_views||0},${c.target_views||0})">Update Views</button>`:''}
+                    ${c.account_status==='ACTIVE_CAMPAIGN'?`<button class="btn-sm" onclick="openMarkComplete('${esc(c.campaign_id)}','${esc(c.full_name)}','${esc(c.email)}')">Mark Complete</button>`:''}
+                    ${c.account_status==='ACTIVE_CAMPAIGN'?`<button class="btn-sm btn-view" onclick="openSetCpm('${esc(c.campaign_id)}','${esc(c.full_name)}',${c.cpm_rate||0})">Set Pay Rate</button>`:''}
+                    <button class="btn-sm" onclick="deleteClient('${esc(c.user_id)}','${esc(c.full_name)}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">
+                        Delete
+                    </button>
+                    ${c.account_status==='REJECTED' ? `<button class="btn-sm"onclick="reactivateClient('${esc(c.user_id)}')">Reactivate</button>` : ''}
+                    <button class="btn-sm"onclick="viewClientDetails('${esc(c.full_name)}','${esc(c.email)}','${esc(c.account_status)}','${esc(c.campaign_name || 'No Campaign')}')">Details</button>
+                </div></td>
+            </tr>`;
+        }).join('');
+    } catch { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Error loading data</p></div></td></tr>`; }
+}
+
+function openCampaignModal(userId, name, email) {
+    currentClient = { userId, name, email };
+    document.getElementById('campaignClientInfo').innerHTML = `<p>Client: <strong>${esc(name)}</strong></p><p>Email: <strong>${esc(email)}</strong></p>`;
+    document.getElementById('campaignForm').style.display = 'block';
+    document.getElementById('campaignSuccess').style.display = 'none';
+    document.getElementById('campaignName').value = '';
+    document.getElementById('campaignBudget').value = '';
+    document.getElementById('campaignViews').value = '';
+    document.getElementById('customPw').value = '';
+    document.getElementById('campaignMsgBox').style.display = 'none';
+    generatePassword(); setTodayDate();
+    document.getElementById('campaignModal').classList.add('open');
+}
+
+async function submitCampaign() {
+    const name = document.getElementById('campaignName').value.trim();
+    const budget = document.getElementById('campaignBudget').value;
+    const views = document.getElementById('campaignViews').value;
+    const start = document.getElementById('campaignStart').value;
+    const end = document.getElementById('campaignEnd').value;
+    const customPw = document.getElementById('customPw').value.trim();
+    const password = customPw || document.getElementById('generatedPw').textContent;
+    const msgBox = document.getElementById('campaignMsgBox');
+    if (!name||!budget||!views||!start||!end) { showModalMsg(msgBox,'Please fill in all fields.','error'); return; }
+    document.getElementById('createCampaignBtn').disabled = true;
+    document.getElementById('createCampaignBtn').textContent = 'Creating...';
+    try {
+        const res = await fetch('/api/admin/create-campaign', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({client_email:currentClient.email,campaign_name:name,budget_total:parseFloat(budget),target_views:parseInt(views),start_date:start,expected_end_date:end,password}) });
+        const data = await res.json();
+        if (data.success) {
+            lastCampaignData = {...data, password, client_email:currentClient.email, client_name:currentClient.name, campaign_name:name};
+            document.getElementById('campaignForm').style.display = 'none';
+            document.getElementById('credsDisplay').innerHTML = `
+                <div class="creds-row"><span class="creds-label">Campaign ID</span><span class="creds-value">${esc(data.campaign_id)}</span></div>
+                <div class="creds-row"><span class="creds-label">Campaign</span><span class="creds-value">${esc(name)}</span></div>
+                <div class="creds-row"><span class="creds-label">Email</span><span class="creds-value">${esc(currentClient.email)}</span></div>
+                <div class="creds-row"><span class="creds-label">Password</span><span class="creds-value">${esc(password)}</span></div>`;
+            document.getElementById('campaignSuccess').style.display = 'block';
+        } else { showModalMsg(msgBox, data.message||'Error.', 'error'); }
+    } catch { showModalMsg(msgBox,'Connection error.','error'); }
+    finally { document.getElementById('createCampaignBtn').disabled=false; document.getElementById('createCampaignBtn').textContent='Create Campaign'; }
+}
+
+function openRejectModal(userId, name, email) {
+    currentClient = { userId, name, email };
+    document.getElementById('rejectClientInfo').innerHTML = `<p>Client: <strong>${esc(name)}</strong></p><p>Email: <strong>${esc(email)}</strong></p>`;
+    document.getElementById('rejectReason').value = '';
+    document.getElementById('rejectMsgBox').style.display = 'none';
+    document.getElementById('rejectModal').classList.add('open');
+}
+
+async function submitReject() {
+    const reason = document.getElementById('rejectReason').value.trim();
+    const msgBox = document.getElementById('rejectMsgBox');
+    document.getElementById('rejectBtn').disabled = true;
+    try {
+        const res = await fetch('/api/admin/reject', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:currentClient.email,reason}) });
+        const data = await res.json();
+        if (data.success) { closeModal('rejectModal'); showToast('Signup rejected.','success'); loadData(); }
+        else { showModalMsg(msgBox, data.message||'Error.','error'); }
+    } catch { showModalMsg(msgBox,'Connection error.','error'); }
+    finally { document.getElementById('rejectBtn').disabled=false; }
+}
+
+function openSendEmailModal() {
+    if (!lastCampaignData) return;
+    closeModal('campaignModal');
+    populateEmailModal(lastCampaignData.client_email, lastCampaignData.client_name, lastCampaignData);
+    document.getElementById('emailModal').classList.add('open');
+}
+
+function openSendEmailFromClient(email, name) {
+    currentClient = { email, name };
+    lastCampaignData = { client_email: email, client_name: name };
+    populateEmailModal(email, name, null);
+    document.getElementById('emailModal').classList.add('open');
+}
+
+function populateEmailModal(email, name, cd) {
+    document.getElementById('emailPreviewBox').innerHTML = `<p>Sending to: <strong>${esc(email)}</strong></p>`;
+    document.getElementById('emailFormSection').style.display = 'block';
+    document.getElementById('emailSuccess').style.display = 'none';
+    document.getElementById('emailMsgBox').style.display = 'none';
+    const pwInput = document.getElementById('emailPasswordInput');
+    pwInput.value = cd?.password || '';
+    document.getElementById('emailPreviewContent').textContent = cd
+        ? `To: ${email}\nSubject: Your Magnetise Media Campaign is Ready - Login Details\n\nHi ${name},\n\nCampaign: ${cd.campaign_name||''}\nCampaign ID: ${cd.campaign_id||''}\nEmail: ${email}\nPassword: ${cd.password||'(enter above)'}\n\nLogin at: magnetise.media/client-login`
+        : `To: ${email}\nSubject: Your Magnetise Media Campaign is Ready - Login Details\n\n[Campaign details + password will be included from the database]`;
+    pwInput.oninput = () => {
+        const pw = pwInput.value;
+        document.getElementById('emailPreviewContent').textContent = `To: ${email}\nSubject: Your Magnetise Media Campaign is Ready - Login Details\n\nHi ${name},\n\nCampaign: ${cd?.campaign_name||'[from DB]'}\nEmail: ${email}\nPassword: ${pw||'(not set)'}\n\nLogin at: magnetise.media/client-login`;
+    };
+}
+
+async function submitSendEmail() {
+    const email = lastCampaignData?.client_email || currentClient?.email;
+    const password = document.getElementById('emailPasswordInput').value.trim();
+    const msgBox = document.getElementById('emailMsgBox');
+    if (!email) { showModalMsg(msgBox,'No client email found.','error'); return; }
+    if (!password) { showModalMsg(msgBox,'Please enter the client password.','error'); return; }
+    document.getElementById('sendEmailBtn').disabled = true;
+    document.getElementById('sendEmailBtn').textContent = 'Sending...';
+    try {
+        const res = await fetch('/api/admin/send-email', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({client_email:email, password}) });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('emailFormSection').style.display = 'none';
+            document.getElementById('emailSentTo').textContent = `Details sent to ${email}`;
+            document.getElementById('emailSuccess').style.display = 'block';
+        } else { showModalMsg(msgBox, data.message||'Error.','error'); }
+    } catch { showModalMsg(msgBox,'Connection error.','error'); }
+    finally { document.getElementById('sendEmailBtn').disabled=false; document.getElementById('sendEmailBtn').textContent='Send Email'; }
+}
+
+let _setCpmCampaignId = null;
+
+function openSetCpm(campaignId, clientName, currentCpm) {
+    _setCpmCampaignId = campaignId;
+    document.getElementById('setCpmInfo').innerHTML = `
+        <p>Client: <strong>${esc(clientName)}</strong></p>
+        <p style="margin-top:4px;">Campaign: <strong>${esc(campaignId)}</strong></p>`;
+    document.getElementById('cpmInput').value = currentCpm || '';
+    document.getElementById('setCpmModal').classList.add('open');
+}
+
+async function submitSetCpm() {
+    const cpm = parseFloat(document.getElementById('cpmInput').value);
+    if (isNaN(cpm) || cpm < 0) { showToast('Enter a valid rate.', 'error'); return; }
+    const btn = document.getElementById('setCpmBtn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+        const res = await fetch('/api/admin/set-cpm', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({campaign_id: _setCpmCampaignId, cpm_rate: cpm})
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('setCpmModal');
+            showToast('Pay rate updated.', 'success');
+            loadData();
+        } else { showToast('Error saving rate.', 'error'); }
+    } catch { showToast('Connection error.', 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Save Rate'; }
+}
+
+let _updateViewsCampaignId = null;
+let _markCompleteCampaignId = null;
+let _markCompleteEmail = null;
+
+function openUpdateViews(campaignId, clientName, currentViews, targetViews) {
+    _updateViewsCampaignId = campaignId;
+    document.getElementById('updateViewsInfo').innerHTML = `
+        <div style="margin-bottom:4px;"><strong>${esc(clientName)}</strong></div>
+        <div style="font-size:13px;color:var(--muted);">Campaign: ${esc(campaignId)}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">Target: <strong style="color:#fff;">${Number(targetViews).toLocaleString()}</strong> views</div>`;
+    document.getElementById('viewsInput').value = currentViews || '';
+    const pct = targetViews ? Math.min(Math.round(((currentViews||0)/targetViews)*100),100) : 0;
+    document.getElementById('viewsProgress').innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Current progress: <strong style="color:#fff;">${pct}%</strong></div>
+        <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#aaa,#fff);border-radius:3px;"></div></div>`;
+    document.getElementById('updateViewsForm').style.display = '';
+    document.getElementById('updateViewsDone').style.display = 'none';
+    document.getElementById('updateViewsBtn').disabled = false;
+    document.getElementById('updateViewsBtn').textContent = 'Update Views';
+    document.getElementById('updateViewsModal').classList.add('open');
+}
+
+async function submitUpdateViews() {
+    const views = parseInt(document.getElementById('viewsInput').value);
+    if (!views || isNaN(views) || views < 0) { showToast('Enter a valid view count.','error'); return; }
+    const btn = document.getElementById('updateViewsBtn');
+    btn.disabled = true; btn.textContent = 'Updating...';
+    try {
+        const res = await fetch('/api/admin/update-views', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({campaign_id:_updateViewsCampaignId, current_views:views}) });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('updateViewsForm').style.display = 'none';
+            document.getElementById('updateViewsDone').style.display = '';
+        } else { showToast('Error updating views.','error'); btn.disabled=false; btn.textContent='Update Views'; }
+    } catch { showToast('Connection error.','error'); btn.disabled=false; btn.textContent='Update Views'; }
+}
+
+function openMarkComplete(campaignId, clientName, email) {
+    _markCompleteCampaignId = campaignId;
+    _markCompleteEmail = email;
+    document.getElementById('markCompleteInfo').innerHTML = `<div style="margin-bottom:4px;"><strong>${esc(clientName)}</strong></div><div style="font-size:13px;color:var(--muted);">${esc(email)}</div><div style="font-size:13px;color:var(--muted);margin-top:4px;">Campaign: ${esc(campaignId)}</div>`;
+    document.getElementById('markCompleteForm').style.display = '';
+    document.getElementById('markCompleteDone').style.display = 'none';
+    document.getElementById('markCompleteBtn').disabled = false;
+    document.getElementById('markCompleteModal').classList.add('open');
+}
+
+async function submitMarkComplete() {
+    const btn = document.getElementById('markCompleteBtn');
+    btn.disabled = true; btn.textContent = 'Completing...';
+    try {
+        const res = await fetch('/api/admin/complete-campaign', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({campaign_id:_markCompleteCampaignId}) });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('markCompleteForm').style.display = 'none';
+            document.getElementById('markCompleteDone').style.display = '';
+        } else { showToast('Error: '+data.message,'error'); btn.disabled=false; btn.textContent='Mark Complete'; }
+    } catch { showToast('Connection error.','error'); btn.disabled=false; btn.textContent='Mark Complete'; }
+}
+async function reactivateClient(userId){
+
+    if(!confirm('Reactivate this client?')) return;
+
+    try{
+
+        const res = await fetch('/api/admin/reactivate-client',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({user_id:userId})
+        });
+
+        const data = await res.json();
+
+        if(data.success){
+            showToast('Client reactivated.');
+            loadData();
+        }else{
+            showToast(data.message || 'Error','error');
+        }
+
+    }catch{
+        showToast('Connection error','error');
+    }
+}
+
+async function deleteClient(userId,name){
+
+    if(!confirm(`Delete ${name}? This cannot be undone.`)) return;
+
+    try{
+
+        const res = await fetch('/api/admin/delete-client',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({user_id:userId})
+        });
+
+        const data = await res.json();
+
+        if(data.success){
+            showToast('Client deleted.');
+            loadData();
+        }else{
+            showToast(data.message || 'Error','error');
+        }
+
+    }catch{
+        showToast('Connection error','error');
+    }
+}
+
+function viewClientDetails(name,email,status,campaign){
+
+    alert(
+`CLIENT DETAILS
+
+Name: ${name}
+
+Email: ${email}
+
+Status: ${status}
+
+Campaign: ${campaign}`
+    );
+}
+function generatePassword() {
+    const chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$';
+    let pw='';
+    for(let i=0;i<12;i++) pw+=chars[Math.floor(Math.random()*chars.length)];
+    document.getElementById('generatedPw').textContent=pw;
+}
+
+function setTodayDate() {
+    const today=new Date().toISOString().split('T')[0];
+    const s=document.getElementById('campaignStart');if(s)s.value=today;
+    const e=document.getElementById('campaignEnd');if(e){const d=new Date();d.setDate(d.getDate()+7);e.value=d.toISOString().split('T')[0];}
+}
+
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showModalMsg(el,text,type){el.textContent=text;el.className='msg-box '+type;el.style.display='block';}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+type+' show';setTimeout(()=>t.classList.remove('show'),3000);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function formatDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});}
+async function doLogout(){await fetch('/api/admin/logout',{method:'POST'});window.location.href='/admin';}
+
+document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
+</script>
+</body>
+</html>

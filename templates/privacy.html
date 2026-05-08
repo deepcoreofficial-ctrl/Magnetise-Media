@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Magnetise Media</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #111111;
+            --ink: #0a0a0a;
+            --muted: #f5f5f5;
+            --muted-fg: #555555;
+            --border: #e8e8e8;
+            --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+            --font-display: "Cormorant Garamond", "Apple Garamond", Garamond, Georgia, serif;
+            --shadow-soft: 0 4px 20px -8px rgba(0,0,0,0.10);
+            --shadow-elegant: 0 24px 70px -24px rgba(0,0,0,0.25);
+            --shadow-3d: 0 6px 28px -4px rgba(0,0,0,0.13), 0 2px 6px -2px rgba(0,0,0,0.08), 0 1px 0 0 rgba(255,255,255,0.8) inset;
+            --shadow-glass: 0 1px 0 0 rgba(255,255,255,0.6) inset, 0 10px 40px -10px rgba(0,0,0,0.10);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--fg);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1 {
+            font-family: var(--font-display);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        h2, h3, h4 {
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 400;
+            letter-spacing: -0.015em;
+            color: var(--ink);
+        }
+
+        a { text-decoration: none; color: inherit; }
+
+        /* ── GLASS ── */
+        .glass {
+            background: rgba(255,255,255,0.18);
+
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+
+            border: 1px solid rgba(255,255,255,0.35);
+
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.12),
+                inset 0 1px 0 rgba(255,255,255,0.45);
+
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ── NAVBAR (from index.html) ── */
+        .navbar {
+            position: fixed;
+            top: 2.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            width: calc(100% - 4rem);
+            max-width: 45rem;
+        }
+
+        .nav-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            border-radius: 9999px;
+            padding: 0.50rem 1.2rem;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.02rem;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1.45rem;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .nav-logo img {
+            width: 3.2rem;
+            height: 3.2rem;
+            object-fit: cover;
+            transform: scale(1.55);
+            transform-origin: center;
+        }
+
+        .nav-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.1rem;
+            border-radius: 9999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            background: var(--ink);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            text-decoration: none;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+
+        .nav-back-btn:hover {
+            opacity: 0.88;
+            transform: scale(1.03);
+        }
+
+        @media (max-width: 640px) {
+            .navbar { width: calc(100% - 1.5rem); top: 0.875rem; }
+        }
+
+        /* ── MAIN WRAPPER ── */
+        .privacy-wrapper {
+            width: min(860px, 92%);
+            margin: 0 auto;
+            padding-top: clamp(10rem, 18vh, 14rem);
+            padding-bottom: 4rem;
+            position: relative;
+            z-index: 3;
+        }
+
+        /* ── GLASS CARD ── */
+        .privacy-glass-container {
+            background: rgba(255,255,255,0.16);
+
+            border: 1px solid rgba(255,255,255,0.35);
+
+            border-radius: 34px;
+
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+
+            padding: 70px;
+
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.12),
+                inset 0 1px 0 rgba(255,255,255,0.45);
+
+            position: relative;
+            overflow: hidden;
+        }
+        /* ── HEADER ── */
+        .privacy-header {
+            text-align: center;
+            margin-bottom: 70px;
+        }
+
+        .privacy-logo {
+            width: 200px;
+            height: 200px;
+            margin-top: 80px;
+            object-fit: contain;
+            margin: 0 auto -45px;
+            display: block;
+        }
+
+        .privacy-header h1 {
+            font-size: clamp(2.6rem, 6vw, 3.8rem);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            margin-bottom: 14px;
+            color: var(--ink);
+        }
+
+        .privacy-updated {
+            color: #000000;
+            font-size: 15px;
+            margin-bottom: 6px;
+        }
+
+        .privacy-contact {
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .privacy-contact a {
+            color: #000000;
+            opacity: 1;
+        }
+
+        .privacy-contact a:hover { text-decoration: underline; }
+
+        /* ── SECTIONS ── */
+        .privacy-section {
+            margin-bottom: 60px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            padding-bottom: 50px;
+        }
+
+        .privacy-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .privacy-section h2 {
+            font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: var(--ink);
+            letter-spacing: -0.02em;
+        }
+
+        .privacy-section h3 {
+            font-size: 18px;
+            font-weight: 700;
+            font-family: var(--font-sans);
+            margin-top: 24px;
+            margin-bottom: 14px;
+            color: #222;
+        }
+
+        .privacy-section p {
+            color: #020202;
+            font-size: 15px;
+            font-weight: 400;
+            line-height: 1.9;
+            margin-bottom: 14px;
+        }
+
+        .privacy-section ul {
+            padding-left: 22px;
+            margin-top: 12px;
+        }
+
+        .privacy-section li {
+            color: #272727;
+            margin-bottom: 10px;
+            line-height: 1.8;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .privacy-section strong { color: var(--ink); }
+
+        .icon-list { list-style: none; padding-left: 0; }
+        .icon-list li { position: relative; padding-left: 34px; }
+        .icon-list li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--ink); font-weight: 700; }
+        .icon-list-x li::before { content: "✕"; }
+
+        /* ── WORDMARK (from index.html) ── */
+        .wordmark {
+            padding-top: 3rem;
+            padding-bottom: 2rem;
+            user-select: none;
+            overflow: hidden;
+            position: relative;
+            z-index: 3;
+        }
+
+        .wordmark-inner {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: clamp(0.06rem, 0.6vw, 0.5rem);
+            padding-inline: 0.75rem;
+        }
+
+        .wm-char { display: flex; flex-direction: column; align-items: center; }
+
+        .wm-string {
+            display: block;
+            width: 1px;
+            background: rgba(0,0,0,0.20);
+            margin-top: 0.3rem;
+        }
+
+        @keyframes sway {
+            0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(var(--ty, 0px)); }
+            50%       { transform: rotate(calc(var(--rot, 0deg) + 1.2deg)) translateY(calc(var(--ty, 0px) + 5px)); }
+        }
+
+        .hang-letter {
+            display: inline-block;
+            transform-origin: top center;
+            animation: sway 5s ease-in-out infinite;
+        }
+
+        /* ── COPYRIGHT BAR ── */
+        .footer-bar {
+            border-top: 1px solid rgba(0, 0, 0, 0.295);
+            padding-block: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 3;
+        }
+
+        .footer-bar span {
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+            font-weight: 500;
+            color: rgba(0, 0, 0, 0.911);
+        }
+
+        /* ── MOBILE ── */
+        @media (max-width: 768px) {
+            .privacy-glass-container {
+                padding: 34px 22px;
+                border-radius: 24px;
+            }
+
+            .privacy-header { margin-bottom: 50px; }
+            .privacy-logo { width: 68px; height: 68px; }
+            .privacy-header h1 { font-size: 2rem; }
+            .privacy-section h2 { font-size: 1.4rem; }
+            .privacy-section p,
+            .privacy-section li { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── NAVBAR ── -->
+    <nav class="navbar">
+        <div class="nav-inner glass">
+            <a href="/" class="nav-logo">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media" />
+                Magnetise Media
+            </a>
+            <a href="/" class="nav-back-btn">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <path d="M19 12H5M12 5l-7 7 7 7"/>
+                </svg>
+                Back to Home
+            </a>
+        </div>
+    </nav>
+
+    <!-- ── PRIVACY CONTENT ── -->
+    <div class="privacy-wrapper">
+        <div class="privacy-glass-container">
+
+            <div class="privacy-header">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media Logo" class="privacy-logo">
+                <h1>Privacy Policy</h1>
+                <p class="privacy-updated">Effective Date: January 2025</p>
+                <p class="privacy-updated">Operating Entity: Magnetise Media (India-based)</p>
+                <p class="privacy-contact">Contact: <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration: underline;">magnetisemedia.co@gmail.com</a></p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>1. Information We Collect</h2>
+                <h3>From Clients:</h3>
+                <ul>
+                    <li>Name and email address</li>
+                    <li>Phone number (optional)</li>
+                    <li>Business/brand name</li>
+                    <li>Payment information (processed via PayPal or Crypto wallet - we do not store full payment details)</li>
+                    <li>Content you submit (videos, audio, images)</li>
+                    <li>Campaign preferences and guidelines</li>
+                </ul>
+                <h3>Automatically Collected:</h3>
+                <ul>
+                    <li>IP address</li>
+                    <li>Browser type and device information</li>
+                    <li>Pages visited on our website</li>
+                    <li>Time spent on pages</li>
+                    <li>Campaign performance data (views, engagement metrics)</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>2. How We Use Your Information</h2>
+                <h3>Primary Uses:</h3>
+                <ul>
+                    <li>Process and manage your campaigns</li>
+                    <li>Communicate campaign updates and results</li>
+                    <li>Provide access to Client Dashboard</li>
+                    <li>Process payments via PayPal or Cryptocurrency</li>
+                    <li>Generate campaign reports</li>
+                    <li>Customer support and consultation</li>
+                </ul>
+                <h3>Secondary Uses:</h3>
+                <ul>
+                    <li>Improve our services and user experience</li>
+                    <li>Analyze campaign performance trends</li>
+                    <li>Marketing communications (you can opt-out anytime)</li>
+                    <li>Comply with legal obligations in India</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>3. Information Sharing</h2>
+                <h3>Who We Share With:</h3>
+                <p><strong>Clippers (Our Network):</strong></p>
+                <ul>
+                    <li>We share your content and campaign guidelines</li>
+                    <li>We share your brand/business name for context</li>
+                    <li>We share budget allocation (displayed in leaderboard for transparency)</li>
+                    <li>We do NOT share your contact info, email, or full payment details</li>
+                </ul>
+                <p><strong>Payment Processors:</strong></p>
+                <ul>
+                    <li>PayPal: Payment information shared for processing (subject to PayPal Privacy Policy)</li>
+                    <li>Cryptocurrency: Wallet addresses shared only for transaction processing</li>
+                    <li>We never store your full payment credentials</li>
+                </ul>
+                <p><strong>Analytics &amp; Tools:</strong></p>
+                <ul>
+                    <li>Google Analytics (website usage - anonymized)</li>
+                    <li>Performance tracking tools (campaign metrics)</li>
+                    <li>All personal data anonymized where possible</li>
+                </ul>
+                <p><strong>Legal Requirements:</strong></p>
+                <ul>
+                    <li>Law enforcement or government agencies (if legally required under Indian law)</li>
+                    <li>To protect Magnetise Media's rights or safety</li>
+                    <li>In connection with business sale or merger</li>
+                </ul>
+                <p><strong>Budget Transparency:</strong></p>
+                <ul>
+                    <li>Budget allocation shown to clippers in leaderboard format</li>
+                    <li>Clippers see performance rankings, not your total budget</li>
+                    <li>This ensures transparency and motivates quality</li>
+                </ul>
+                <h3>We Do NOT:</h3>
+                <ul class="icon-list icon-list-x">
+                    <li>Sell your personal information</li>
+                    <li>Share client lists with third parties for marketing</li>
+                    <li>Use your content beyond campaign purposes (without permission)</li>
+                    <li>Share your email or contact details with clippers</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>4. Data Security</h2>
+                <h3>How We Protect Your Data:</h3>
+                <ul>
+                    <li>Industry-standard SSL encryption</li>
+                    <li>Secure servers with restricted access</li>
+                    <li>Payment data handled by PayPal (PCI-DSS compliant) or encrypted crypto wallets</li>
+                    <li>Regular security audits</li>
+                    <li>Two-factor authentication available for dashboard</li>
+                </ul>
+                <h3>Limitations:</h3>
+                <ul>
+                    <li>No system is 100% secure</li>
+                    <li>We cannot guarantee absolute security against sophisticated attacks</li>
+                    <li>You are responsible for keeping your login credentials safe</li>
+                    <li>Immediately report any unauthorized access to <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration: underline;">magnetisemedia.co@gmail.com</a></li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>5. Data Retention</h2>
+                <h3>How Long We Keep Your Data:</h3>
+                <ul>
+                    <li><strong>Active Campaigns:</strong> Throughout campaign + 2 months extended reach period</li>
+                    <li><strong>Campaign Reports:</strong> 1 year after campaign completion (then automatically deleted)</li>
+                    <li><strong>Account Data:</strong> 1 year after last campaign (then archived)</li>
+                    <li><strong>Payment Records:</strong> 6 years (required by Indian tax law)</li>
+                    <li><strong>Legal Records:</strong> As required by Indian regulations</li>
+                </ul>
+                <h3>Data Deletion:</h3>
+                <ul>
+                    <li>You may request deletion anytime after campaign completion</li>
+                    <li>Dashboard access removed immediately upon request</li>
+                    <li>Personal data deleted within 60 days of request</li>
+                    <li>Payment/tax records retained per legal requirements (cannot be deleted)</li>
+                </ul>
+                <h3>Automatic Deletion:</h3>
+                <ul>
+                    <li>Campaign reports deleted 1 year after completion</li>
+                    <li>Dashboard access expires 1 year after last campaign</li>
+                    <li>Archived data deleted after 6 years (except legal records)</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>6. Your Rights</h2>
+                <h3>You Have the Right To:</h3>
+                <ul class="icon-list">
+                    <li>Access your personal data</li>
+                    <li>Update or correct your information</li>
+                    <li>Request deletion of your data (subject to legal retention requirements)</li>
+                    <li>Opt-out of marketing emails (campaign updates cannot be opted out)</li>
+                    <li>Download your campaign data/reports (within 1-year window)</li>
+                    <li>Request account closure</li>
+                </ul>
+                <h3>How to Exercise Rights:</h3>
+                <p>Email us at <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration: underline;">magnetisemedia.co@gmail.com</a> with your request.</p>
+                <p><strong>Response Time:</strong></p>
+                <ul>
+                    <li>We respond within 10 business days</li>
+                    <li>Complex requests may take up to 30 days</li>
+                    <li>You'll receive acknowledgment within 10 days</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>7. Cookies</h2>
+                <h3>What We Use:</h3>
+                <ul>
+                    <li>Essential cookies (for login, dashboard access)</li>
+                    <li>Analytics cookies (Google Analytics)</li>
+                    <li>Performance cookies (to improve website speed)</li>
+                </ul>
+                <h3>Your Control:</h3>
+                <ul>
+                    <li>You can disable cookies in browser settings</li>
+                    <li>May affect website functionality and dashboard access</li>
+                    <li>Essential cookies cannot be disabled for dashboard use</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>8. Third-Party Links</h2>
+                <p>Our website may contain links to:</p>
+                <ul>
+                    <li>Social media platforms (Instagram, TikTok, YouTube)</li>
+                    <li>Payment processors (PayPal, crypto exchanges)</li>
+                    <li>Discord community</li>
+                </ul>
+                <p>We are not responsible for privacy practices of these third parties. Review their privacy policies separately.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>9. Children's Privacy</h2>
+                <p>Magnetise Media services are not intended for individuals under 18. We do not knowingly collect data from minors. If we discover such data, we delete it immediately.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>10. International Data Transfers</h2>
+                <p>Magnetise Media operates from India. If you are located outside India, your data may be transferred to and processed in India. By using our services, you consent to this transfer and acknowledge Indian data protection laws apply.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>11. Payment Data</h2>
+                <h3>PayPal:</h3>
+                <ul>
+                    <li>Processed via PayPal's secure platform</li>
+                    <li>We do not store your PayPal login or full card details</li>
+                    <li>Subject to PayPal's Privacy Policy and Terms</li>
+                </ul>
+                <h3>Cryptocurrency:</h3>
+                <ul>
+                    <li>Wallet addresses shared only for transactions</li>
+                    <li>Transaction hashes recorded for proof of payment</li>
+                    <li>We do not access or store your private keys</li>
+                    <li>Subject to blockchain transparency (public ledger)</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>12. California Privacy Rights (CCPA)</h2>
+                <p>If you are a California resident, you have additional rights:</p>
+                <ul>
+                    <li>Right to know what data we collect</li>
+                    <li>Right to delete your data (subject to legal requirements)</li>
+                    <li>Right to opt-out of data sales (we don't sell data)</li>
+                    <li>Right to non-discrimination</li>
+                </ul>
+                <p>Contact us at <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration: underline;">magnetisemedia.co@gmail.com</a> to exercise these rights. Response within 10 business days.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>13. Changes to Privacy Policy</h2>
+                <p>We may update this Privacy Policy at any time. Material changes notified via email 14 days before effective date. Continued use after changes constitute acceptance.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>14. Contact Us</h2>
+                <p><strong>For Privacy Questions:</strong></p>
+                <ul>
+                    <li>Email: <a href="mailto:magnetisemedia.co@gmail.com" style="text-decoration: underline;">magnetisemedia.co@gmail.com</a></li>
+                    <li>Instagram: <a href="https://instagram.com/magnetise.media" target="_blank" style="text-decoration: underline;">@magnetise.media</a></li>
+                    <li>Response Time: Within 10 business days</li>
+                </ul>
+                <p style="margin-top:28px; font-style:italic; color:#000000; font-family: var(--font-display); font-weight: 600; font-size: 1.20rem;">By working with Magnetise Media, you consent to this Privacy Policy.</p>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── COPYRIGHT BAR ── -->
+    <div class="footer-bar">
+        <span>© 2026 Magnetise Media. All rights reserved.</span>
+    </div>
+
+<script>
+/* ── 3D Tube Background (from login page) ── */
+(function(){
+    const s = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+    cam.position.set(0, 0, 12);
+    const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    r.setSize(innerWidth, innerHeight);
+    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const c = r.domElement;
+    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;opacity:0.65;';
+    document.body.appendChild(c);
+    const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime:{value:0} },
+        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+
+        void main(){
+
+            float flow =
+                sin(vUv.x * 6.28318 + uTime * 1.2) * .5 + .5;
+
+            /* darker overall tube */
+            float grey = mix(0.015, 0.08, flow);
+
+            vec3 color = vec3(grey);
+
+            /* softer edge glow */
+            float fresnel =
+                pow(1. - abs(dot(vNormal, vec3(0,0,1))), 2.);
+
+            color += vec3(fresnel * 0.025);
+
+            /* much less white fading on ends */
+            float alpha =
+                smoothstep(0., .03, vUv.x) *
+                smoothstep(1., .97, vUv.x);
+
+            gl_FragColor = vec4(color, alpha * .95);
+        }
+        `,
+        transparent: true,
+        side: THREE.DoubleSide
+    });
+    let ribbon, t = 0;
+    function pts(tf){
+        const p = [];
+        for(let i = 0; i < 150; i++){
+            const t2 = i/150;
+            p.push(new THREE.Vector3((t2-.5)*30, Math.sin(t2*Math.PI*2.5+tf*.3)*6, Math.cos(t2*Math.PI*1.2+tf*.2)*3));
+        }
+        return p;
+    }
+    ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)), 150, 2.5, 32, false), mat);
+    s.add(ribbon);
+    s.add(new THREE.AmbientLight(0x222222, 0.25));
+    window.addEventListener('resize', ()=>{
+        cam.aspect = innerWidth/innerHeight;
+        cam.updateProjectionMatrix();
+        r.setSize(innerWidth, innerHeight);
+    });
+    (function loop(){
+        requestAnimationFrame(loop);
+        t += .004;
+        ribbon.geometry.dispose();
+        ribbon.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(t)), 150, 2.5, 32, false);
+        mat.uniforms.uTime.value = t;
+        ribbon.rotation.y = Math.sin(t*.15)*.2;
+        ribbon.rotation.x = Math.cos(t*.1)*.1;
+        cam.position.x = Math.sin(t*.12)*2;
+        cam.position.y = Math.cos(t*.08)*1;
+        cam.lookAt(0,0,0);
+        r.render(s,cam);
+    })();
+})();
+</script>
+</body>
+</html>

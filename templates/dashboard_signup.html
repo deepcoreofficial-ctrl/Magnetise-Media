@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account - Magnetise Media</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', sans-serif;
+            padding: 20px;
+            overflow: hidden;
+        }
+        .custom-cursor {
+            width: 8px; height: 8px; background: rgba(0,0,0,0.6);
+            border-radius: 50%; position: fixed;
+            pointer-events: none; z-index: 9999; opacity: 0;
+        }
+        .page-wrapper {
+            position: relative; z-index: 10;
+            width: 100%; max-width: 500px;
+        }
+        .card {
+            background: #0a0a0a;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 24px; padding: 52px 48px;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 20px 60px rgba(0,0,0,0.35);
+        }
+        .top-brand {
+            position: fixed;
+            top: 5px; right: 16px;
+            display: flex; align-items: center; gap: -2px;
+            color: #0a0a0a; font-weight: 700; font-size: 18px; z-index: 100;
+        }
+        .top-brand img { width: 74px; height: 74px; margin-right: -16px; }
+        .card-header { text-align: center; margin-bottom: 36px; }
+        .card-header img { width: 148px; height: 148px; margin-bottom: -20px; filter: brightness(0) invert(1); object-fit: contain; }
+        .card-header h1 { color: #ffffff; font-size: 30px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+        .card-header p { color: #bbbbbb; font-size: 14px; }
+
+        /* Step dots */
+        .step-dots { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 28px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.2); transition: all 0.3s; }
+        .dot.active { width: 28px; border-radius: 4px; background: #ffffff; }
+
+        .info-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px; padding: 16px; margin-bottom: 24px;
+        }
+        .info-box p { color: #bbbbbb; font-size: 13px; line-height: 1.6; }
+        .info-box strong { color: #ffffff; }
+
+        /* Email pill for OTP step */
+        .email-pill {
+            display: none; align-items: center; justify-content: space-between;
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px; padding: 10px 14px; margin-bottom: 20px;
+        }
+        .email-pill span { color: #ffffff; font-size: 14px; font-weight: 600; }
+        .email-pill button { background: none; border: none; color: #888; font-size: 12px; cursor: pointer; font-family: 'Inter', sans-serif; }
+        .email-pill button:hover { color: #fff; }
+
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; color: #ccc; font-weight: 500; font-size: 13px; margin-bottom: 8px; }
+        .form-group input {
+            width: 100%; background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+            padding: 13px 16px; color: #fff; font-family: 'Inter', sans-serif; font-size: 14px; transition: all 0.25s;
+        }
+        .form-group input::placeholder { color: rgba(255,255,255,0.3); }
+        .form-group input:focus { outline: none; border-color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.09); }
+
+        /* OTP input special */
+        #otpInput {
+            text-align: center; font-size: 28px; font-weight: 800;
+            letter-spacing: 12px; padding: 16px;
+        }
+
+        .otp-hint { color: #cecece; font-size: 12px; text-align: center; margin-top: 8px; }
+        .otp-hint a { color: #cecece; cursor: pointer; text-decoration: underline; }
+        .otp-hint a:hover { color: #fff; }
+
+        .msg-box { border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 16px; display: none; line-height: 1.5; }
+        .msg-box.error { background: rgba(255,68,68,0.12); border: 1px solid rgba(255,68,68,0.3); color: #ff8080; }
+        .msg-box.success { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; }
+
+        /* BUTTONS */
+        .btn-primary {
+            position: relative; overflow: hidden; width: 100%;
+            background: transparent; color: #ffffff;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 14px; font-weight: 700; font-size: 15px;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+            transition: transform 0.2s, box-shadow 0.2s, color 0.2s;
+            z-index: 1;
+        }
+        .btn-primary::after {
+            content: '';
+            position: absolute;
+            bottom: -100%; left: 0;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            transition: bottom .45s cubic-bezier(.77,0,.18,1);
+            z-index: -1;
+        }
+        .btn-primary:hover::after { bottom: 0; }
+        .btn-primary:hover { color: #000; border-color: #fff; transform: translateY(-2px); }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+        .btn-ghost {
+            position: relative; overflow: hidden; width: 100%;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: transparent; border: 1.5px solid rgba(255,255,255,0.25);
+            color: #ffffff; border-radius: 10px;
+            padding: 12px; font-size: 15px; font-weight: 600;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, color 0.2s;
+            z-index: 1;
+        }
+        .btn-ghost::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 100%;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            transition: left .45s cubic-bezier(.77,0,.18,1);
+            z-index: -1;
+        }
+        .btn-ghost:hover::after { left: 0; }
+        .btn-ghost:hover { border-color: #fff; color: #000; }
+
+        .btn-outline {
+            position: relative; overflow: hidden; width: 100%;
+            background: transparent; color: #ffffff;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            font-family: 'Inter', sans-serif; border-radius: 10px;
+            padding: 12px; font-weight: 600; cursor: pointer;
+            transition: border-color 0.2s, color 0.2s;
+            z-index: 1;
+        }
+        .btn-outline::after {
+            content: '';
+            position: absolute;
+            bottom: -100%; left: 0;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            transition: bottom .45s cubic-bezier(.77,0,.18,1);
+            z-index: -1;
+        }
+        .btn-outline:hover::after { bottom: 0; }
+        .btn-outline:hover { border-color: #fff; color: #000; }
+
+        .divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.479); }
+        .divider span { color: #bebebe; font-size: 12px; }
+
+        .card-footer { text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.08); }
+        .card-footer p { color: #e0e0e0; font-size: 12px; line-height: 1.7; }
+        .card-footer a { color: #d1d1d1; text-decoration: underline; text-underline-offset: 3px; }
+        .card-footer a:hover { color: #fff; }
+
+        .back-home {
+            position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 12px; margin-top: 16px;
+            border: 1.5px solid rgba(255,255,255,0.267);
+            border-radius: 10px; color: #ffffff;
+            text-decoration: none; font-size: 14px;
+            font-family: 'Inter', sans-serif; font-weight: 600;
+            transition: border-color 0.2s, color 0.2s;
+            z-index: 1;
+        }
+        .back-home::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 100%;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            transition: left .45s cubic-bezier(.77,0,.18,1);
+            z-index: -1;
+        }
+        .back-home:hover::after { left: 0; }
+        .back-home:hover { border-color: #fff; color: #000; }
+        .arrow { font-size: 18px; line-height: 1; }
+
+        /* Success screen */
+        .success-screen { display: none; text-align: center; }
+        .success-icon {
+            width: 64px; height: 64px; border-radius: 50%;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+            display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;
+        }
+        .success-icon svg { color: #ffffff; }
+        .success-screen h2 { color: #ffffff; font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+        .success-screen p { color: #bbbbbb; font-size: 14px; line-height: 1.7; margin-bottom: 8px; }
+        .steps-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; padding: 16px 20px; margin: 20px 0; text-align: left;
+        }
+        .step-item { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+        .step-item:last-child { margin-bottom: 0; }
+        .step-text { flex: 1; color: #aaaaaa; font-size: 13px; line-height: 1.6; }
+        .sn {
+            flex-shrink: 0; margin-top: 1px;
+            display: inline-block; width: 20px; height: 20px; border-radius: 50%;
+            background: rgba(255,255,255,0.12); color: #ffffff;
+            font-size: 11px; font-weight: 700; text-align: center; line-height: 20px;
+        }
+        .contact-line { text-align: center; margin-top: 16px; color: #777; font-size: 12px; }
+        .contact-line a { color: #cccccc; text-decoration: none; }
+        .contact-line a:hover { color: #fff; }
+
+        @media (max-width: 520px) {
+            .card { padding: 36px 24px; border-radius: 20px; }
+            .card-header h1 { font-size: 24px; }
+            .card-header img { width: 80px; height: 80px; }
+            .top-brand { font-size: 15px; }
+            .top-brand img { width: 44px; height: 44px; }
+        }
+    </style>
+</head>
+<body>
+<div class="custom-cursor" id="cursor"></div>
+
+<div class="page-wrapper">
+    <div class="top-brand">
+        <img src="{{ url_for('static', filename='logo.png') }}">
+        <span>Magnetise Media</span>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media Logo">
+            <h1>Create Account</h1>
+            <p>Join Magnetise Media and scale your content reach</p>
+        </div>
+
+        <div class="step-dots">
+            <div class="dot active" id="dot1"></div>
+            <div class="dot" id="dot2"></div>
+        </div>
+
+        <div class="msg-box" id="msgBox"></div>
+
+        <!-- STEP 1: Name + Email -->
+        <div id="step1">
+            <div class="info-box">
+                <p>Fill in your details below. Our team will review your request and <strong>send you login credentials</strong> once your campaign is set up. No password needed from you.</p>
+            </div>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="nameInput" placeholder="Your full name" autocomplete="name" onkeydown="if(event.key==='Enter') sendOtp()"/>
+            </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="emailInput" placeholder="your@email.com" autocomplete="email" onkeydown="if(event.key==='Enter') sendOtp()"/>
+            </div>
+            <button class="btn-primary" id="sendOtpBtn" onclick="sendOtp()">Continue</button>
+            <div class="divider"><span>or</span></div>
+            <button class="btn-outline" onclick="goToLogin()">Login</button>
+            <div class="card-footer">
+                <p>By signing up, you agree to our <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy.</a></p>
+            </div>
+            <a href="/" class="back-home">
+                <span class="arrow">←</span>
+                <span>Back to Home</span>
+            </a>
+        </div>
+
+        <!-- STEP 2: OTP Verification -->
+        <div id="step2" style="display:none;">
+            <div class="email-pill" id="emailPill" style="display:flex;">
+                <span id="emailPillText"></span>
+                <button onclick="goBackToStep1()">Change</button>
+            </div>
+            <div class="info-box">
+                <p>Enter the <strong>6-digit code</strong> we sent to your email. Code will expire in 10 minutes..</p>
+            </div>
+            <div class="form-group">
+                <label>Verification Code</label>
+                <input type="text" id="otpInput" placeholder="000000" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter') verifyOtp()"/>
+                <div class="otp-hint">Didn't receive it? <a onclick="resendOtp()">Resend code</a></div>
+            </div>
+            <button class="btn-primary" id="verifyBtn" onclick="verifyOtp()">Verify & Create Account</button>
+            <button class="btn-ghost" onclick="goBackToStep1()" style="margin-top:12px;">← Back</button>
+        </div>
+
+        <!-- SUCCESS -->
+        <div class="success-screen" id="successScreen">
+            <div class="success-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h2>Account Created</h2>
+            <p id="successName"></p>
+            <p>Your account has been created. Our team will review your request and contact you soon.</p>
+            <div class="steps-box">
+                <div class="step-item">
+                    <span class="sn">1</span>
+                    <span class="step-text">Our team reviews your signup</span>
+                </div>
+                <div class="step-item">
+                    <span class="sn">2</span>
+                    <span class="step-text">If you have an active campaign planned, your application is approved by a campaign manager</span>
+                </div>
+                <div class="step-item">
+                    <span class="sn">3</span>
+                    <span class="step-text">Your login credentials are sent securely to your email</span>
+                </div>
+            </div>
+            <div class="contact-line">Questions? <a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a></div>
+            <button class="btn-primary" style="margin-top:24px;" onclick="goToLogin()">Back to Login</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Greyscale animated tube background
+(function(){
+    const s = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+    cam.position.set(0, 0, 12);
+    const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    r.setSize(innerWidth, innerHeight);
+    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const c = r.domElement;
+    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;opacity:0.78;';
+    document.body.appendChild(c);
+    const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime:{value:0} },
+        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        fragmentShader: `uniform float uTime;varying vec2 vUv;varying vec3 vNormal;void main(){float flow=sin(vUv.x*6.28318+uTime*1.2)*.5+.5;float grey=mix(0.04,0.18,flow);vec3 color=vec3(grey);float fresnel=pow(1.-abs(dot(vNormal,vec3(0,0,1))),2.);color+=vec3(fresnel*0.08);float alpha=smoothstep(0.,.15,vUv.x)*smoothstep(1.,.85,vUv.x);gl_FragColor=vec4(color,alpha*.95);}`,
+        transparent:true, side:THREE.DoubleSide
+    });
+    let ribbon, t=0;
+    function pts(tf){const p=[];for(let i=0;i<150;i++){const t2=i/150;p.push(new THREE.Vector3((t2-.5)*30,Math.sin(t2*Math.PI*2.5+tf*.3)*6,Math.cos(t2*Math.PI*1.2+tf*.2)*3));}return p;}
+    ribbon=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)),150,2.5,32,false),mat);
+    s.add(ribbon);
+    s.add(new THREE.AmbientLight(0x222222,0.25));
+    window.addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
+    (function loop(){requestAnimationFrame(loop);t+=.004;ribbon.geometry.dispose();ribbon.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(t)),150,2.5,32,false);mat.uniforms.uTime.value=t;ribbon.rotation.y=Math.sin(t*.15)*.2;ribbon.rotation.x=Math.cos(t*.1)*.1;cam.position.x=Math.sin(t*.12)*2;cam.position.y=Math.cos(t*.08)*1;cam.lookAt(0,0,0);r.render(s,cam);})();
+})();
+
+const cursorEl = document.getElementById('cursor');
+let mx=0,my=0,cx=0,cy=0,onPage=false;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;if(!onPage){cx=mx;cy=my;onPage=true;}});
+document.addEventListener('mouseleave',()=>{cursorEl.style.opacity='0';onPage=false;});
+document.addEventListener('mouseenter',()=>{cursorEl.style.opacity='1';onPage=true;});
+(function ac(){cx+=(mx-cx)*.08;cy+=(my-cy)*.08;cursorEl.style.left=cx-4+'px';cursorEl.style.top=cy-4+'px';const m=20;cursorEl.style.opacity=(mx<m||mx>window.innerWidth-m||my<m||my>window.innerHeight-m||!onPage)?'0':'1';requestAnimationFrame(ac);})();
+
+function showMsg(t,type){const b=document.getElementById('msgBox');b.textContent=t;b.className='msg-box '+type;b.style.display='block';}
+function hideMsg(){document.getElementById('msgBox').style.display='none';}
+
+let currentName = '';
+let currentEmail = '';
+
+async function sendOtp() {
+    const name = document.getElementById('nameInput').value.trim();
+    const email = document.getElementById('emailInput').value.trim();
+    hideMsg();
+    if (!name || name.length < 2) { showMsg('Please enter your full name.', 'error'); return; }
+    if (!email || !email.includes('@')) { showMsg('Please enter a valid email address.', 'error'); return; }
+
+    const btn = document.getElementById('sendOtpBtn');
+    btn.disabled = true; btn.textContent = 'Sending code...';
+
+    try {
+        const res = await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ full_name: name, email })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentName = name;
+            currentEmail = email;
+            document.getElementById('emailPillText').textContent = email;
+            document.getElementById('step1').style.display = 'none';
+            document.getElementById('step2').style.display = 'block';
+            document.getElementById('dot1').classList.remove('active');
+            document.getElementById('dot2').classList.add('active');
+            setTimeout(() => document.getElementById('otpInput').focus(), 50);
+        } else {
+            showMsg(data.message || 'Something went wrong.', 'error');
+        }
+    } catch { showMsg('Connection error. Please try again.', 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Continue'; }
+}
+
+async function resendOtp() {
+    hideMsg();
+    try {
+        const res = await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ full_name: currentName, email: currentEmail })
+        });
+        const data = await res.json();
+        if (data.success) showMsg('A new code has been sent to your email.', 'success');
+        else showMsg(data.message || 'Could not resend.', 'error');
+    } catch { showMsg('Connection error.', 'error'); }
+}
+
+async function verifyOtp() {
+    const otp = document.getElementById('otpInput').value.trim();
+    hideMsg();
+    if (!otp || otp.length !== 6) { showMsg('Please enter the 6-digit code.', 'error'); return; }
+
+    const btn = document.getElementById('verifyBtn');
+    btn.disabled = true; btn.textContent = 'Verifying...';
+
+    try {
+        const res = await fetch('/api/auth/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: currentEmail, otp })
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('step2').style.display = 'none';
+            document.getElementById('successName').textContent = 'Hi ' + currentName + ',';
+            document.getElementById('successScreen').style.display = 'block';
+        } else {
+            showMsg(data.message || 'Invalid or expired code.', 'error');
+        }
+    } catch { showMsg('Connection error. Please try again.', 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Verify & Create Account'; }
+}
+
+function goBackToStep1() {
+    hideMsg();
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step1').style.display = 'block';
+    document.getElementById('dot1').classList.add('active');
+    document.getElementById('dot2').classList.remove('active');
+    document.getElementById('otpInput').value = '';
+}
+
+function goToLogin() { window.location.href = '/client-login'; }
+</script>
+</body>
+</html>

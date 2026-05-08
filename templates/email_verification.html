@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - Magnetise Media</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', sans-serif;
+            padding: 20px;
+            overflow: hidden;
+        }
+        .custom-cursor {
+            width: 8px; height: 8px; background: rgba(0,0,0,0.6);
+            border-radius: 50%; position: fixed;
+            pointer-events: none; z-index: 9999; opacity: 0;
+        }
+        .top-brand {
+            position: fixed;
+            top: 5px; right: 16px;
+            display: flex; align-items: center; gap: -2px;
+            color: #0a0a0a; font-weight: 700; font-size: 18px; z-index: 100;
+        }
+        .top-brand img { width: 74px; height: 74px; margin-right: -16px; }
+        .page-wrapper { position: relative; z-index: 10; width: 100%; max-width: 500px; }
+        .card {
+            background: #0a0a0a;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 24px; padding: 52px 48px;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 20px 60px rgba(0,0,0,0.35);
+            text-align: center;
+        }
+        .card-header { margin-bottom: 32px; }
+        .card-header img {
+            width: 148px; height: 148px; margin-bottom: -20px;
+            filter: brightness(0) invert(1); object-fit: contain;
+        }
+        .card-header h1 {
+            color: #ffffff; font-size: 30px; font-weight: 800;
+            letter-spacing: -0.5px; margin-bottom: 6px;
+        }
+        .card-header p { color: #bbbbbb; font-size: 14px; }
+
+        .email-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px; padding: 14px 18px; margin: 24px 0;
+        }
+        .email-box p { color: #aaaaaa; font-size: 13px; margin-bottom: 4px; }
+        .email-box span { color: #ffffff; font-weight: 600; font-size: 14px; word-break: break-all; }
+
+        .info-text {
+            color: #888888; font-size: 13px; line-height: 1.7; margin-bottom: 20px;
+        }
+
+        .timer-box {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px; padding: 10px 20px;
+            margin: 4px 0 24px;
+        }
+        .timer-box svg { color: #aaaaaa; flex-shrink: 0; }
+        .timer-box span { color: #ffffff; font-size: 15px; font-weight: 700; }
+        .timer-box .label { color: #888; font-size: 13px; font-weight: 400; }
+
+        /* BUTTONS */
+        .btn-primary {
+            position: relative; overflow: hidden; width: 100%;
+            background: transparent; color: #ffffff;
+            border: 1.5px solid rgba(255,255,255,0.2);
+            border-radius: 10px; padding: 14px;
+            font-weight: 700; font-size: 15px;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+            transition: transform 0.2s, color 0.2s, border-color 0.2s;
+            z-index: 1; margin-bottom: 12px;
+        }
+        .btn-primary::after {
+            content: ''; position: absolute;
+            bottom: -100%; left: 0;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            transition: bottom .45s cubic-bezier(.77,0,.18,1);
+            z-index: -1;
+        }
+        .btn-primary:hover::after { bottom: 0; }
+        .btn-primary:hover { color: #000; border-color: #fff; transform: translateY(-2px); }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+        .btn-ghost {
+            position: relative; overflow: hidden; width: 100%;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: transparent; border: 1.5px solid rgba(255,255,255,0.25);
+            color: #ccc; border-radius: 10px;
+            padding: 12px; font-size: 15px; font-weight: 600;
+            cursor: pointer; font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, color 0.2s;
+            z-index: 1; text-decoration: none;
+        }
+        .btn-ghost::after {
+            content: ''; position: absolute;
+            top: 0; left: 100%;
+            width: 100%; height: 100%;
+            background: #ffffff;
+            transition: left .45s cubic-bezier(.77,0,.18,1);
+            z-index: -1;
+        }
+        .btn-ghost:hover::after { left: 0; }
+        .btn-ghost:hover { border-color: #fff; color: #000; }
+
+        @media (max-width: 520px) {
+            .card { padding: 36px 24px; border-radius: 20px; }
+            .card-header h1 { font-size: 24px; }
+            .card-header img { width: 80px; height: 80px; }
+            .top-brand { font-size: 15px; }
+            .top-brand img { width: 44px; height: 44px; }
+        }
+    </style>
+</head>
+<body>
+<div class="custom-cursor" id="cursor"></div>
+
+<div class="page-wrapper">
+    <div class="top-brand">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media Logo">
+        <span>Magnetise Media</span>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media Logo">
+            <h1>Check Your Email</h1>
+            <p>A verification link has been sent to you</p>
+        </div>
+
+        <div class="email-box">
+            <p>Verification sent to</p>
+            <span id="emailDisplay">your@email.com</span>
+        </div>
+
+        <p class="info-text">
+            Click the link in the email to verify your account and activate your dashboard access.
+        </p>
+
+        <div class="timer-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span class="label">Link expires in</span>
+            <span id="timer">10:00</span>
+        </div>
+
+        <p class="info-text" style="margin-bottom: 24px;">
+            Didn't receive the email? Check your spam folder or resend below.
+        </p>
+
+        <button class="btn-primary" id="resendBtn" onclick="resendEmail()">Resend Email</button>
+        <a href="/client-login" class="btn-ghost">
+            <span>←</span> Back to Login
+        </a>
+    </div>
+</div>
+
+<script>
+    // Get email from URL
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get('email');
+    if (email) document.getElementById('emailDisplay').textContent = email;
+
+    // Timer — mm:ss format
+    let total = 10 * 60;
+    function updateTimer() {
+        if (total <= 0) { document.getElementById('timer').textContent = 'Expired'; return; }
+        total--;
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        document.getElementById('timer').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    setInterval(updateTimer, 1000);
+
+    function resendEmail() {
+        const btn = document.getElementById('resendBtn');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = 'Resend Email';
+            total = 10 * 60;
+        }, 2000);
+    }
+
+    // Greyscale animated tube background
+    (function(){
+        const s = new THREE.Scene();
+        const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+        cam.position.set(0, 0, 12);
+        const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        r.setSize(innerWidth, innerHeight);
+        r.setPixelRatio(Math.min(devicePixelRatio, 2));
+        const c = r.domElement;
+        c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;opacity:0.78;';
+        document.body.appendChild(c);
+        const mat = new THREE.ShaderMaterial({
+            uniforms: { uTime:{value:0} },
+            vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+            fragmentShader: `uniform float uTime;varying vec2 vUv;varying vec3 vNormal;void main(){float flow=sin(vUv.x*6.28318+uTime*1.2)*.5+.5;float grey=mix(0.04,0.18,flow);vec3 color=vec3(grey);float fresnel=pow(1.-abs(dot(vNormal,vec3(0,0,1))),2.);color+=vec3(fresnel*0.08);float alpha=smoothstep(0.,.15,vUv.x)*smoothstep(1.,.85,vUv.x);gl_FragColor=vec4(color,alpha*.95);}`,
+            transparent:true, side:THREE.DoubleSide
+        });
+        let ribbon, t=0;
+        function pts(tf){const p=[];for(let i=0;i<150;i++){const t2=i/150;p.push(new THREE.Vector3((t2-.5)*30,Math.sin(t2*Math.PI*2.5+tf*.3)*6,Math.cos(t2*Math.PI*1.2+tf*.2)*3));}return p;}
+        ribbon=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)),150,2.5,32,false),mat);
+        s.add(ribbon);
+        s.add(new THREE.AmbientLight(0x222222,0.25));
+        window.addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
+        (function loop(){requestAnimationFrame(loop);t+=.004;ribbon.geometry.dispose();ribbon.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(t)),150,2.5,32,false);mat.uniforms.uTime.value=t;ribbon.rotation.y=Math.sin(t*.15)*.2;ribbon.rotation.x=Math.cos(t*.1)*.1;cam.position.x=Math.sin(t*.12)*2;cam.position.y=Math.cos(t*.08)*1;cam.lookAt(0,0,0);r.render(s,cam);})();
+    })();
+
+    const cursorEl = document.getElementById('cursor');
+    let mx=0,my=0,cx=0,cy=0,onPage=false;
+    document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;if(!onPage){cx=mx;cy=my;onPage=true;}});
+    document.addEventListener('mouseleave',()=>{cursorEl.style.opacity='0';onPage=false;});
+    document.addEventListener('mouseenter',()=>{cursorEl.style.opacity='1';onPage=true;});
+    (function ac(){cx+=(mx-cx)*.08;cy+=(my-cy)*.08;cursorEl.style.left=cx-4+'px';cursorEl.style.top=cy-4+'px';const m=20;cursorEl.style.opacity=(mx<m||mx>window.innerWidth-m||my<m||my>window.innerHeight-m||!onPage)?'0':'1';requestAnimationFrame(ac);})();
+</script>
+</body>
+</html>
