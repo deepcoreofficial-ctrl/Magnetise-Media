@@ -10,3 +10,4 @@ gunicorn
 PyMySQL
 cryptography
 flask-cors
+pymysql

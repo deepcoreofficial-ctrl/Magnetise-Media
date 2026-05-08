@@ -13,6 +13,8 @@ from flask_limiter.util import get_remote_address
 from datetime import timedelta
 import re
 from flask_cors import CORS
+import pymysql
+pymysql.install_as_MySQLdb()
 
 load_dotenv()
 
@@ -34,11 +36,15 @@ limiter = Limiter(
 
 
 # MySQL config
-app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST')
-app.config['MYSQL_PORT'] = int(os.getenv('MYSQL_PORT'))
-app.config['MYSQL_USER'] = os.getenv('MYSQL_USER')
-app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD')
-app.config['MYSQL_DB'] = os.getenv('MYSQL_DB')
+from urllib.parse import urlparse
+
+db_url = urlparse(os.getenv("MYSQL_URL"))
+
+app.config['MYSQL_HOST'] = db_url.hostname
+app.config['MYSQL_USER'] = db_url.username
+app.config['MYSQL_PASSWORD'] = db_url.password
+app.config['MYSQL_DB'] = db_url.path[1:]
+app.config['MYSQL_PORT'] = db_url.port
 app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 mysql = MySQL(app)
 
