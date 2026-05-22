@@ -593,9 +593,11 @@ async function init(){
         if(!result.success){showPending();return;}
         _dashData=result.data;
         const d=_dashData;
+        if(d.impersonating){showImpersonationBanner(d.impersonator_email);}
         document.getElementById('sbName').textContent=d.full_name||'—';
         document.getElementById('sbEmail').textContent=d.email||'—';
         if(window.innerWidth<=640){_sidebarOpen=false;document.getElementById('sidebar').classList.add('closed');document.getElementById('mainWrap').classList.add('full');document.getElementById('toggleBtn').classList.add('sidebar-closed');}
+        if(d.account_status==='REJECTED'){showRejected(d.rejection_reason);return;}
         if(!d.campaign_name){showPending();return;}
         renderDashboard(d);
         loadViewsGraph();
@@ -766,6 +768,17 @@ function renderDashboard(d){
         </div>
         <div id="topClipsSection" style="margin-top:20px;"></div>
         <div id="clipperLeaderboardSection" style="margin-top:20px;"></div>
+        <div class="glass" id="platformSection" style="display:none;margin-top:20px;">
+            <div style="font-size:13px;font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;margin-bottom:20px;">Platform Breakdown</div>
+            <div style="display:grid;grid-template-columns:180px 1fr;gap:24px;align-items:center;">
+                <canvas id="platformChart" style="max-height:180px;"></canvas>
+                <div id="platformLegend"></div>
+            </div>
+        </div>
+        <div class="glass" id="milestonesSection" style="display:none;margin-top:20px;">
+            <div style="font-size:13px;font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;margin-bottom:20px;">Weekly Milestones</div>
+            <div id="milestonesGrid"></div>
+        </div>
         ${isCompleted
             ?`<div class="report-box"><div class="report-box-text"><h3>Campaign Report Ready</h3><p>Your campaign is complete. Download your full PDF report.</p></div><a class="btn-download" href="/api/dashboard/report" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Report</a></div>`
             :`<div class="report-unavail">Campaign report will be available once your campaign is completed.</div>`
@@ -775,6 +788,8 @@ function renderDashboard(d){
     setTimeout(()=>{const f=document.getElementById('progressFill');if(f)f.style.width=pct+'%';},100);
     loadTopClips();
     loadLeaderboard();
+    loadPlatformBreakdown();
+    loadWeeklyMilestones();
 }
 
 async function openCampaignAnalyticsModal(){
@@ -817,6 +832,64 @@ async function openCampaignAnalyticsModal(){
             grad.addColorStop(1,'rgba(255,255,255,0)');
             new Chart(ctx,{type:'line',data:{labels,datasets:[{data:values,borderColor:'#ffffff',backgroundColor:grad,borderWidth:2,pointBackgroundColor:'#fff',pointRadius:3,tension:0.4,fill:true}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#555',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{min:0,ticks:{color:'#555',font:{size:10},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}}}});
         }else{document.getElementById('accAnalyticsChart').style.display='none';document.getElementById('accNoGraph').style.display='';}
+    }catch(e){}
+}
+
+async function loadPlatformBreakdown(){
+    try{
+        const res=await fetch('/api/dashboard/platform-breakdown');
+        const data=await res.json();
+        if(!data.success||!data.breakdown||data.breakdown.length===0) return;
+        document.getElementById('platformSection').style.display='';
+        const COLORS={'TikTok':'#69C9D0','YouTube':'#FF4444','Reels':'#E1306C','Shorts':'#FF6B35','Instagram':'#E1306C'};
+        const labels=data.breakdown.map(r=>r.platform||'Other');
+        const values=data.breakdown.map(r=>r.total_views||0);
+        const colors=labels.map(l=>COLORS[l]||'#888');
+        const ctx=document.getElementById('platformChart').getContext('2d');
+        new Chart(ctx,{
+            type:'doughnut',
+            data:{labels,datasets:[{data:values,backgroundColor:colors,borderWidth:0,hoverOffset:4}]},
+            options:{responsive:true,cutout:'72%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${Number(c.raw).toLocaleString()} views`}}}}
+        });
+        const total=values.reduce((a,b)=>a+b,0);
+        document.getElementById('platformLegend').innerHTML=data.breakdown.map((r,i)=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:10px;height:10px;border-radius:50%;background:${colors[i]};flex-shrink:0;"></div>
+                    <span style="font-size:13px;color:#fff;">${esc(r.platform||'Other')}</span>
+                    <span style="font-size:11px;color:#555;">${r.clip_count} clip${r.clip_count!==1?'s':''}</span>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:13px;font-weight:700;color:#fff;">${Number(r.total_views||0).toLocaleString()}</div>
+                    <div style="font-size:11px;color:#555;">${total?Math.round((r.total_views/total)*100):0}%</div>
+                </div>
+            </div>`).join('');
+    }catch(e){}
+}
+
+async function loadWeeklyMilestones(){
+    try{
+        const res=await fetch('/api/dashboard/weekly-milestones');
+        const data=await res.json();
+        if(!data.success||!data.weeks||data.weeks.length===0) return;
+        document.getElementById('milestonesSection').style.display='';
+        document.getElementById('milestonesGrid').innerHTML=data.weeks.map(w=>{
+            const pct=w.target?Math.min(Math.round((w.delivered/w.target)*100),100):0;
+            const color=w.hit?'#4ade80':pct>=50?'#facc15':'#ff5555';
+            return `<div style="display:grid;grid-template-columns:60px 1fr auto;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                <div style="font-size:12px;font-weight:700;color:#555;">Week ${w.week}</div>
+                <div>
+                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width .4s ease;"></div>
+                    </div>
+                    <div style="font-size:11px;color:#555;margin-top:4px;">Target: ${Number(w.target).toLocaleString()}</div>
+                </div>
+                <div style="text-align:right;min-width:80px;">
+                    <div style="font-size:13px;font-weight:700;color:${color};">${Number(w.delivered).toLocaleString()}</div>
+                    <div style="font-size:11px;color:#555;">${w.hit?'✓ Hit':''+pct+'%'}</div>
+                </div>
+            </div>`;
+        }).join('');
     }catch(e){}
 }
 
@@ -1098,51 +1171,46 @@ function fillAccount(d){
     document.getElementById('accTotalViews').textContent=Number(d.current_views||0).toLocaleString();
     document.getElementById('accTotalSpent').textContent=d.budget_total?'$'+Number(d.budget_total).toLocaleString():'—';
     const cl=document.getElementById('campaignsList');
-    if(!d.campaign_id){cl.innerHTML='<div style="color:#555;font-size:13px;">No campaigns yet.</div>';return;}
-    const cs=getCampaignStatus(d);
-    const statusClass=cs==='COMPLETED'?'cis-completed':'cis-active';
-    const isCompleted=cs==='COMPLETED';
-    const cv=d.current_views||0,tv=d.target_views||1;
-    const pct=Math.min(Math.round((cv/tv)*100),100);
-    const budget=Number(d.budget_total||0);
-    cl.innerHTML=`
-        <div class="campaign-item" style="flex-direction:column;align-items:flex-start;gap:16px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:10px;">
+    const campaigns = d.all_campaigns || (d.campaign_id ? [d] : []);
+    if(campaigns.length===0){cl.innerHTML='<div style="color:#555;font-size:13px;">No campaigns yet.</div>';return;}
+    cl.innerHTML = campaigns.map(camp => {
+        const campCs = camp.status==='COMPLETED'?'COMPLETED':'ACTIVE';
+        const scls = campCs==='COMPLETED'?'cis-completed':'cis-active';
+        const campCv = camp.current_views||0, campTv = camp.target_views||1;
+        const campPct = Math.min(Math.round((campCv/campTv)*100),100);
+        const campBudget = Number(camp.budget_total||0);
+        const isCurrent = camp.campaign_id === d.campaign_id;
+        return `
+        <div class="campaign-item" style="flex-direction:column;align-items:flex-start;gap:14px;${isCurrent?'border-color:rgba(255,255,255,0.2);':''}" >
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:8px;">
                 <div>
-                    <div class="campaign-item-id">${esc(d.campaign_id)}</div>
-                    <div class="campaign-item-dates">${esc(d.campaign_name||'')} &nbsp;·&nbsp; ${esc(d.start_date||'')} → ${esc(d.expected_end_date||'')}</div>
+                    <div class="campaign-item-id">${esc(camp.campaign_id)} ${isCurrent?'<span style="font-size:10px;font-weight:700;color:#00cc6a;background:rgba(0,204,106,0.1);border:1px solid rgba(0,204,106,0.2);border-radius:20px;padding:2px 8px;margin-left:6px;">Current</span>':''}</div>
+                    <div class="campaign-item-dates">${esc(camp.campaign_name||'')} · ${esc(camp.start_date||'')} → ${esc(camp.expected_end_date||'')}</div>
                 </div>
-                <span class="campaign-item-status ${statusClass}">${cs.charAt(0)+cs.slice(1).toLowerCase()}</span>
+                <span class="campaign-item-status ${scls}">${campCs.charAt(0)+campCs.slice(1).toLowerCase()}</span>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;">
                 <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
                     <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Views</div>
-                    <div style="font-size:18px;font-weight:800;color:#fff;">${Number(cv).toLocaleString()}</div>
+                    <div style="font-size:18px;font-weight:800;color:#fff;">${Number(campCv).toLocaleString()}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
                     <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Progress</div>
-                    <div style="font-size:18px;font-weight:800;color:#ffb300;">${pct}%</div>
+                    <div style="font-size:18px;font-weight:800;color:#ffb300;">${campPct}%</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
                     <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Budget</div>
-                    <div style="font-size:18px;font-weight:800;color:#00cc6a;">$${budget.toLocaleString()}</div>
+                    <div style="font-size:18px;font-weight:800;color:#00cc6a;">$${campBudget.toLocaleString()}</div>
                 </div>
             </div>
             <div style="width:100%;">
-                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                    <span style="font-size:11px;color:#555;">Views toward target</span>
-                    <span style="font-size:11px;font-weight:700;color:#fff;">${Number(cv).toLocaleString()} / ${Number(tv).toLocaleString()}</span>
-                </div>
                 <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
-                    <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#ffffff,#888888);border-radius:3px;transition:width 1s ease;"></div>
+                    <div style="height:100%;width:${campPct}%;background:linear-gradient(90deg,#ffffff,#888888);border-radius:3px;"></div>
                 </div>
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                ${isCompleted?`<a class="btn-check-progress" href="/api/dashboard/report" target="_blank"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Report</a>`:''}
-                <button class="btn-check-progress" onclick="openCampaignAnalyticsModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>View Analytics</button>
-            </div>
-        </div>
-    `;
+        </div>`;
+    }).join('');
+
 }
 
 async function submitChangePassword(){
@@ -1161,10 +1229,43 @@ async function submitChangePassword(){
         else{msg.textContent=data.message||'Error updating password.';msg.className='form-msg error';}
     }catch(e){msg.textContent='Connection error.';msg.className='form-msg error';}
 }
-
+function showRejected(reason){
+    document.getElementById('sbEmail').textContent='{{ email }}';
+    document.getElementById('dashboardContent').innerHTML=`
+    <div class="glass">
+        <div class="pending-state">
+            <div class="pending-icon" style="background:rgba(255,85,85,0.08);border-color:rgba(255,85,85,0.2);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#ff5555" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+            </div>
+            <h3 style="color:#ff8080;">Application Not Approved</h3>
+            <p>Unfortunately your signup was not approved at this time.</p>
+            ${reason ? `<div class="contact-box" style="margin-top:16px;background:rgba(255,85,85,0.06);border-color:rgba(255,85,85,0.15);">
+                <p style="color:#ff8080;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Reason</p>
+                <p style="color:#ccc;font-size:14px;">${esc(reason)}</p>
+            </div>` : ''}
+            <div class="contact-box" style="margin-top:16px;">
+                <p>Questions? Contact us</p>
+                <a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a>
+            </div>
+        </div>
+    </div>`;
+}
 function showPending(){
     document.getElementById('sbEmail').textContent='{{ email }}';
     document.getElementById('dashboardContent').innerHTML=`<div class="glass"><div class="pending-state"><div class="pending-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h3>Campaign Pending</h3><p>Your account is set up but your campaign has not been created yet. Our team will reach out soon to get things started.</p><div class="contact-box" style="margin-top:24px;"><p>Need help?</p><a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a></div></div></div>`;
+}
+
+function showImpersonationBanner(adminEmail){
+    if(document.getElementById('impersonationBanner'))return;
+    const bar=document.createElement('div');
+    bar.id='impersonationBanner';
+    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#ffb300;color:#000;font-size:13px;font-weight:700;padding:9px 16px;display:flex;align-items:center;justify-content:center;gap:14px;box-shadow:0 -2px 14px rgba(0,0,0,0.4);';
+    bar.innerHTML=`<span>Admin view — viewing this client's dashboard${adminEmail?(' (as '+esc(adminEmail)+')'):''}.</span><a href="/admin/stop-impersonate" style="background:#000;color:#fff;text-decoration:none;font-weight:700;padding:5px 14px;border-radius:6px;">Exit to admin</a>`;
+    document.body.appendChild(bar);
 }
 
 async function handleLogout(){

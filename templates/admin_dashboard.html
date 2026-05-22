@@ -268,6 +268,20 @@
             background: currentColor;
         }
 
+        .status-active    { background: rgba(0,255,136,0.08); border-color: rgba(0,255,136,0.25); color: #00cc6a; }
+        .status-pending   { background: rgba(255,179,0,0.08); border-color: rgba(255,179,0,0.25); color: #ffb300; }
+        .status-rejected  { background: rgba(255,85,85,0.08);  border-color: rgba(255,85,85,0.25); color: #ff8080; }
+        .status-completed { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); color: #ccc; }
+
+        .dv-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+        .dv-row b { color: #fff; font-weight: 600; text-align: right; }
+
+        .field select {
+            width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 14px; font-family: 'Inter', sans-serif;
+        }
+        .field select option { background: #161616; color: #fff; }
+
         .action-btns {
             display: flex;
             gap: 8px;
@@ -818,6 +832,110 @@
         </div>
     </div>
 </div>
+<!-- CLIPS MANAGER MODAL -->
+<div class="modal-overlay" id="clipsModal" onclick="if(event.target===this)closeModal('clipsModal')">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Manage Clips</h2>
+      <button class="modal-close" onclick="closeModal('clipsModal')">✕</button>
+    </div>
+    <div style="margin-bottom:18px;">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:14px;">Campaign: <strong id="clipsModalCampaignId" style="color:#fff;"></strong></p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" id="clipperNameInput" placeholder="Clipper name" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;"/>
+        <select id="clipPlatformInput" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;">
+          <option value="">Platform...</option>
+          <option value="TikTok">TikTok</option>
+          <option value="YouTube">YouTube</option>
+          <option value="Reels">Reels</option>
+          <option value="Shorts">Shorts</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="number" id="clipViewsInput" placeholder="Views" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;"/>
+        <input type="text" id="clipUrlInput" placeholder="URL (optional)" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;"/>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-modal-primary" id="clipSubmitBtn" onclick="submitClip()">Add Clip</button>
+        <button class="btn-modal-cancel" id="clipCancelEdit" onclick="resetClipForm()" style="display:none;">Cancel edit</button>
+      </div>
+    </div>
+    <div id="clipsListContainer" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- EDIT CAMPAIGN MODAL -->
+<div class="modal-overlay" id="editCampaignModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Edit Campaign</div>
+            <button class="modal-close" onclick="closeModal('editCampaignModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="editCampaignInfo"></div>
+        <div class="field"><label>Campaign Name</label><input type="text" id="editName"/></div>
+        <div class="field-row">
+            <div class="field"><label>Budget ($)</label><input type="number" id="editBudget"/></div>
+            <div class="field"><label>Target Views</label><input type="number" id="editTarget"/></div>
+        </div>
+        <div class="field-row">
+            <div class="field"><label>Current Views</label><input type="number" id="editViews"/></div>
+            <div class="field"><label>CPM ($ / 1k)</label><input type="number" id="editCpm" step="0.01"/></div>
+        </div>
+        <p style="color:var(--muted);font-size:11px;margin:-8px 0 14px;">Changing current views adds a point to the client's history graph and may trigger a milestone email.</p>
+        <div class="field-row">
+            <div class="field"><label>Start Date</label><input type="date" id="editStart"/></div>
+            <div class="field"><label>End Date</label><input type="date" id="editEnd"/></div>
+        </div>
+        <div class="field"><label>Status</label>
+            <select id="editStatus">
+                <option value="ACTIVE">Active</option>
+                <option value="COMPLETED">Completed</option>
+            </select>
+        </div>
+        <div id="editCampaignMsg" class="msg-box"></div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModal('editCampaignModal')">Cancel</button>
+            <button class="btn-modal-primary" id="editCampaignBtn" onclick="submitEditCampaign()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- RESET PASSWORD MODAL -->
+<div class="modal-overlay" id="resetPwModal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <div class="modal-title">Reset Client Password</div>
+            <button class="modal-close" onclick="closeModal('resetPwModal')">×</button>
+        </div>
+        <div class="modal-client-info" id="resetPwInfo"></div>
+        <div class="field" style="margin-top:16px;"><label>New Password</label>
+            <div style="display:flex;gap:10px;">
+                <input type="text" id="resetPwInput" style="flex:1;font-family:'Courier New',monospace;letter-spacing:1px;"/>
+                <button class="btn-regen" onclick="regenResetPw()">Regenerate</button>
+            </div>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:8px;">Min 8 characters. The client can still change it themselves later.</p>
+        <div id="resetPwMsg" class="msg-box"></div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModal('resetPwModal')">Close</button>
+            <button class="btn-modal-primary" id="resetPwBtn" onclick="submitResetPw()">Set Password</button>
+        </div>
+    </div>
+</div>
+
+<!-- CLIENT DETAILS MODAL -->
+<div class="modal-overlay" id="detailsModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="detailsTitle">Client</div>
+            <button class="modal-close" onclick="closeModal('detailsModal')">×</button>
+        </div>
+        <div id="detailsBody"></div>
+        <div class="modal-actions">
+            <button class="btn-modal-primary" onclick="closeModal('detailsModal')">Close</button>
+        </div>
+    </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -859,6 +977,8 @@ init3D();
 
 // ADMIN LOGIC
 let currentClient = null, lastCampaignData = null;
+let _clientsById = {};   // user_id -> merged row (from /pending and /clients); actions look up by id
+function C(uid){ return _clientsById[uid] || {}; }
 
 document.addEventListener('DOMContentLoaded', () => { checkAdmin(); setTodayDate(); generatePassword(); });
 
@@ -895,6 +1015,7 @@ async function loadPending() {
         const data = await res.json();
         const users = data.users || [];
         document.getElementById('pendingBadge').textContent = users.length;
+        users.forEach(u => { _clientsById[u.user_id] = { ..._clientsById[u.user_id], ...u }; });
         if (users.length === 0) { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><p>No pending signups</p></div></td></tr>`; return; }
         tbody.innerHTML = users.map(u => `<tr>
             <td><strong>${esc(u.full_name)}</strong></td>
@@ -902,8 +1023,8 @@ async function loadPending() {
             <td class="td-muted">${formatDate(u.created_at)}</td>
             <td><span class="status status-pending"><span class="status-dot"></span>Pending</span></td>
             <td><div class="action-btns">
-                <button class="btn-sm btn-create" onclick="openCampaignModal('${esc(u.user_id)}','${esc(u.full_name)}','${esc(u.email)}')">Create Campaign</button>
-                <button class="btn-sm btn-reject" onclick="openRejectModal('${esc(u.user_id)}','${esc(u.full_name)}','${esc(u.email)}')">Reject</button>
+                <button class="btn-sm btn-create" onclick="aCreate('${esc(u.user_id)}')">Create Campaign</button>
+                <button class="btn-sm btn-reject" onclick="aReject('${esc(u.user_id)}')">Reject</button>
             </div></td>
         </tr>`).join('');
     } catch { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Error loading data</p></div></td></tr>`; }
@@ -916,27 +1037,50 @@ async function loadAllClients() {
         const data = await res.json();
         const clients = data.clients || [];
         document.getElementById('clientsBadge').textContent = clients.length;
+        clients.forEach(c => { _clientsById[c.user_id] = { ..._clientsById[c.user_id], ...c }; });
         if (clients.length === 0) { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No clients yet</p></div></td></tr>`; return; }
         tbody.innerHTML = clients.map(c => {
-            const sc = c.account_status === 'ACTIVE_CAMPAIGN' ? 'status-active' : c.account_status === 'REJECTED' ? 'status-rejected' : 'status-pending';
-            const sl = c.account_status === 'ACTIVE_CAMPAIGN' ? 'Active' : c.account_status === 'REJECTED' ? 'Rejected' : 'Pending';
+            const st = (c.account_status || '').toUpperCase();
+            const meta = {
+                ACTIVE:    ['status-active','Active'],
+                PENDING:   ['status-pending','Pending'],
+                REJECTED:  ['status-rejected','Rejected'],
+                COMPLETED: ['status-completed','Completed']
+            }[st] || ['status-pending', st || 'Unknown'];
+            const uid = esc(c.user_id);
+            const hasCampaign = !!c.campaign_id;
+            let actions = '';
+            if (st === 'PENDING') {
+                actions = `
+                    <button class="btn-sm btn-create" onclick="aCreate('${uid}')">Create Campaign</button>
+                    <button class="btn-sm btn-reject" onclick="aReject('${uid}')">Reject</button>`;
+            } else if (st === 'REJECTED') {
+                actions = `<button class="btn-sm" onclick="aReactivate('${uid}')">Reactivate</button>`;
+            } else if (st === 'ACTIVE') {
+                actions = `
+                    <button class="btn-sm btn-view" onclick="aUpdateViews('${uid}')">Update Views</button>
+                    <button class="btn-sm" onclick="aEditCampaign('${uid}')">Edit Campaign</button>
+                    <button class="btn-sm btn-view" onclick="aSetCpm('${uid}')">Set Pay Rate</button>
+                    <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>
+                    ${!c.email_sent ? `<button class="btn-sm btn-send" onclick="aSendEmail('${uid}')">Send Details</button>` : ''}
+                    <button class="btn-sm" onclick="aMarkComplete('${uid}')">Mark Complete</button>`;
+            } else if (st === 'COMPLETED') {
+                actions = `
+                    <button class="btn-sm" onclick="aEditCampaign('${uid}')">Edit Campaign</button>
+                    <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>`;
+            }
+            const shared = `
+                ${hasCampaign ? `<a class="btn-sm" href="/api/admin/invoice/${esc(c.campaign_id)}" target="_blank">Invoice</a>` : ''}
+                ${(st==='ACTIVE'||st==='COMPLETED') ? `<button class="btn-sm" onclick="aResetPw('${uid}')">Reset Password</button>` : ''}
+                ${hasCampaign ? `<button class="btn-sm btn-view" onclick="aViewAs('${uid}')">View as</button>` : ''}
+                <button class="btn-sm" onclick="aDetails('${uid}')">Details</button>
+                <button class="btn-sm" onclick="aDelete('${uid}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Delete</button>`;
             return `<tr>
                 <td><strong>${esc(c.full_name)}</strong></td>
                 <td class="td-email">${esc(c.email)}</td>
                 <td class="td-muted">${c.campaign_name ? esc(c.campaign_name) : '—'}</td>
-                <td><span class="status ${sc}"><span class="status-dot"></span>${sl}</span></td>
-                <td><div class="action-btns">
-                    ${c.account_status==='PENDING'?`<button class="btn-sm btn-create" onclick="openCampaignModal('${esc(c.user_id)}','${esc(c.full_name)}','${esc(c.email)}')">Create Campaign</button>`:''}
-                    ${c.account_status==='ACTIVE_CAMPAIGN'&&!c.email_sent?`<button class="btn-sm btn-send" onclick="openSendEmailFromClient('${esc(c.email)}','${esc(c.full_name)}')">Send Details</button>`:''}
-                    ${c.account_status==='ACTIVE_CAMPAIGN'?`<button class="btn-sm btn-view" onclick="openUpdateViews('${esc(c.campaign_id)}','${esc(c.full_name)}',${c.current_views||0},${c.target_views||0})">Update Views</button>`:''}
-                    ${c.account_status==='ACTIVE_CAMPAIGN'?`<button class="btn-sm" onclick="openMarkComplete('${esc(c.campaign_id)}','${esc(c.full_name)}','${esc(c.email)}')">Mark Complete</button>`:''}
-                    ${c.account_status==='ACTIVE_CAMPAIGN'?`<button class="btn-sm btn-view" onclick="openSetCpm('${esc(c.campaign_id)}','${esc(c.full_name)}',${c.cpm_rate||0})">Set Pay Rate</button>`:''}
-                    <button class="btn-sm" onclick="deleteClient('${esc(c.user_id)}','${esc(c.full_name)}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">
-                        Delete
-                    </button>
-                    ${c.account_status==='REJECTED' ? `<button class="btn-sm"onclick="reactivateClient('${esc(c.user_id)}')">Reactivate</button>` : ''}
-                    <button class="btn-sm"onclick="viewClientDetails('${esc(c.full_name)}','${esc(c.email)}','${esc(c.account_status)}','${esc(c.campaign_name || 'No Campaign')}')">Details</button>
-                </div></td>
+                <td><span class="status ${meta[0]}"><span class="status-dot"></span>${meta[1]}</span></td>
+                <td><div class="action-btns">${actions}${shared}</div></td>
             </tr>`;
         }).join('');
     } catch { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Error loading data</p></div></td></tr>`; }
@@ -1198,25 +1342,139 @@ async function deleteClient(userId,name){
     }
 }
 
-function viewClientDetails(name,email,status,campaign){
+// ---- Action dispatchers: resolve the client by id, then open the right modal ----
+function aCreate(uid){ const c=C(uid); openCampaignModal(c.user_id, c.full_name, c.email); }
+function aReject(uid){ const c=C(uid); openRejectModal(c.user_id, c.full_name, c.email); }
+function aUpdateViews(uid){ const c=C(uid); openUpdateViews(c.campaign_id, c.full_name, c.current_views||0, c.target_views||0); }
+function aSetCpm(uid){ const c=C(uid); openSetCpm(c.campaign_id, c.full_name, c.cpm_rate||0); }
+function aMarkComplete(uid){ const c=C(uid); openMarkComplete(c.campaign_id, c.full_name, c.email); }
+function aSendEmail(uid){ const c=C(uid); openSendEmailFromClient(c.email, c.full_name); }
+function aClips(uid){ const c=C(uid); openClipsModal(c.campaign_id); }
+function aReactivate(uid){ reactivateClient(uid); }
+function aDelete(uid){ const c=C(uid); deleteClient(uid, c.full_name || 'this client'); }
+function aEditCampaign(uid){ openEditCampaign(C(uid)); }
+function aResetPw(uid){ openResetPw(C(uid)); }
+function aViewAs(uid){ impersonateClient(C(uid)); }
+function aDetails(uid){ openDetails(C(uid)); }
 
-    alert(
-`CLIENT DETAILS
-
-Name: ${name}
-
-Email: ${email}
-
-Status: ${status}
-
-Campaign: ${campaign}`
-    );
+// ---- Edit Campaign: override every field the client dashboard shows ----
+let _editCampaignId = null;
+function openEditCampaign(c){
+    if(!c.campaign_id){ showToast('No campaign to edit.','error'); return; }
+    _editCampaignId = c.campaign_id;
+    document.getElementById('editCampaignInfo').innerHTML = `<p>Client: <strong>${esc(c.full_name)}</strong></p><p>Campaign: <strong>${esc(c.campaign_id)}</strong></p>`;
+    document.getElementById('editName').value   = c.campaign_name || '';
+    document.getElementById('editBudget').value = c.budget_total ?? '';
+    document.getElementById('editTarget').value = c.target_views ?? '';
+    document.getElementById('editViews').value  = c.current_views ?? '';
+    document.getElementById('editCpm').value    = c.cpm_rate ?? '';
+    document.getElementById('editStart').value  = (c.start_date || '').slice(0,10);
+    document.getElementById('editEnd').value    = (c.expected_end_date || '').slice(0,10);
+    document.getElementById('editStatus').value = (c.campaign_status || 'ACTIVE').toUpperCase() === 'COMPLETED' ? 'COMPLETED' : 'ACTIVE';
+    document.getElementById('editCampaignMsg').style.display = 'none';
+    document.getElementById('editCampaignModal').classList.add('open');
 }
-function generatePassword() {
+async function submitEditCampaign(){
+    const msg = document.getElementById('editCampaignMsg');
+    const body = {
+        campaign_id: _editCampaignId,
+        campaign_name: document.getElementById('editName').value.trim(),
+        budget_total: document.getElementById('editBudget').value,
+        target_views: document.getElementById('editTarget').value,
+        current_views: document.getElementById('editViews').value,
+        cpm_rate: document.getElementById('editCpm').value,
+        start_date: document.getElementById('editStart').value,
+        expected_end_date: document.getElementById('editEnd').value,
+        status: document.getElementById('editStatus').value
+    };
+    const btn = document.getElementById('editCampaignBtn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try{
+        const res = await fetch('/api/admin/update-campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const data = await res.json();
+        if(data.success){ closeModal('editCampaignModal'); showToast('Campaign updated.'); loadData(); }
+        else { showModalMsg(msg, data.message || 'Error.', 'error'); }
+    }catch{ showModalMsg(msg,'Connection error.','error'); }
+    finally{ btn.disabled = false; btn.textContent = 'Save Changes'; }
+}
+
+// ---- Reset client password (admin override) ----
+let _resetPwEmail = null;
+function openResetPw(c){
+    _resetPwEmail = c.email;
+    document.getElementById('resetPwInfo').innerHTML = `<p>Client: <strong>${esc(c.full_name)}</strong></p><p>${esc(c.email)}</p>`;
+    document.getElementById('resetPwInput').value = genPw();
+    document.getElementById('resetPwMsg').style.display = 'none';
+    document.getElementById('resetPwModal').classList.add('open');
+}
+function regenResetPw(){ document.getElementById('resetPwInput').value = genPw(); }
+async function submitResetPw(){
+    const msg = document.getElementById('resetPwMsg');
+    const pw = document.getElementById('resetPwInput').value.trim();
+    if(pw.length < 8){ showModalMsg(msg,'Password must be at least 8 characters.','error'); return; }
+    const btn = document.getElementById('resetPwBtn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try{
+        const res = await fetch('/api/admin/reset-client-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_resetPwEmail,new_password:pw})});
+        const data = await res.json();
+        if(data.success){ showModalMsg(msg,'Password updated. Share it with the client.','success'); }
+        else { showModalMsg(msg, data.message || 'Error.', 'error'); }
+    }catch{ showModalMsg(msg,'Connection error.','error'); }
+    finally{ btn.disabled = false; btn.textContent = 'Set Password'; }
+}
+
+// ---- Rich Details modal: mirrors exactly what the client sees ----
+function openDetails(c){
+    const cv = Number(c.current_views||0), tv = Number(c.target_views||0);
+    const pct = tv ? Math.min(Math.round((cv/tv)*100),100) : 0;
+    const budget = Number(c.budget_total||0);
+    const ops = Math.round(budget*0.30), guarantee = budget - ops;
+    const cpm = c.cpm_rate ? '$'+Number(c.cpm_rate).toFixed(2) : 'Not set';
+    const sm = {ACTIVE:['status-active','Active'],PENDING:['status-pending','Pending'],REJECTED:['status-rejected','Rejected'],COMPLETED:['status-completed','Completed']}[(c.account_status||'').toUpperCase()] || ['status-pending', c.account_status||'—'];
+    document.getElementById('detailsTitle').textContent = c.full_name || 'Client';
+    document.getElementById('detailsBody').innerHTML = `
+        <div class="modal-client-info" style="margin-bottom:18px;">
+            <p>${esc(c.email)}</p>
+            <p style="margin-top:8px;"><span class="status ${sm[0]}"><span class="status-dot"></span>${sm[1]}</span></p>
+        </div>
+        ${c.campaign_id ? `
+            <div class="dv-row"><span>Campaign</span><b>${esc(c.campaign_name||'—')}</b></div>
+            <div class="dv-row"><span>Campaign ID</span><b style="font-family:'Courier New',monospace;">${esc(c.campaign_id)}</b></div>
+            <div class="dv-row"><span>Campaign Status</span><b>${esc(c.campaign_status||'—')}</b></div>
+            <div class="dv-row"><span>Views</span><b>${cv.toLocaleString()} / ${tv.toLocaleString()}</b></div>
+            <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin:10px 0 14px;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#aaa,#fff);border-radius:3px;"></div></div>
+            <div class="dv-row"><span>Progress</span><b>${pct}%</b></div>
+            <div class="dv-row"><span>Total Budget</span><b>$${budget.toLocaleString()}</b></div>
+            <div class="dv-row"><span>Ops Fee (30%)</span><b style="color:#ff8080;">$${ops.toLocaleString()}</b></div>
+            <div class="dv-row"><span>View Guarantee (70%)</span><b style="color:#00cc6a;">$${guarantee.toLocaleString()}</b></div>
+            <div class="dv-row"><span>CPM (Cost / 1k)</span><b>${cpm}</b></div>
+            <div class="dv-row"><span>Start</span><b>${esc((c.start_date||'—').slice(0,10))}</b></div>
+            <div class="dv-row"><span>Expected End</span><b>${esc((c.expected_end_date||'—').slice(0,10))}</b></div>
+            <div class="dv-row" style="border-bottom:none;"><span>Login email sent</span><b>${c.email_sent?'Yes':'No'}</b></div>
+        ` : `<p style="color:var(--muted);font-size:14px;padding:12px 0;">No campaign yet.${c.rejection_reason ? '<br>Rejection reason: '+esc(c.rejection_reason) : ''}</p>`}
+    `;
+    document.getElementById('detailsModal').classList.add('open');
+}
+
+// ---- View as client (impersonation) ----
+async function impersonateClient(c){
+    if(!c.email) return;
+    if(!confirm(`Open ${c.full_name||c.email}'s dashboard as them?\nYou'll stay logged in as admin and can exit from the banner at the bottom.`)) return;
+    try{
+        const res = await fetch('/api/admin/impersonate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:c.email})});
+        const data = await res.json();
+        if(data.success){ window.location.href = data.redirect || '/dashboard'; }
+        else { showToast(data.message || 'Could not view as client.','error'); }
+    }catch{ showToast('Connection error.','error'); }
+}
+function genPw() {
     const chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$';
     let pw='';
     for(let i=0;i<12;i++) pw+=chars[Math.floor(Math.random()*chars.length)];
-    document.getElementById('generatedPw').textContent=pw;
+    return pw;
+}
+function generatePassword() {
+    document.getElementById('generatedPw').textContent = genPw();
 }
 
 function setTodayDate() {
@@ -1233,6 +1491,89 @@ function formatDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('
 async function doLogout(){await fetch('/api/admin/logout',{method:'POST'});window.location.href='/admin';}
 
 document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
+
+let currentClipsCampaignId = null;
+let _clipsCache = [];
+let _editingClipId = null;
+
+async function openClipsModal(campaignId) {
+  if (!campaignId) { showToast('No campaign for clips.', 'error'); return; }
+  currentClipsCampaignId = campaignId;
+  document.getElementById('clipsModalCampaignId').textContent = campaignId;
+  resetClipForm();
+  document.getElementById('clipsModal').classList.add('open');
+  await loadClipsList(campaignId);
+}
+
+async function loadClipsList(campaignId) {
+  const container = document.getElementById('clipsListContainer');
+  try {
+    const res = await fetch(`/api/admin/clips/${campaignId}`);
+    const data = await res.json();
+    _clipsCache = data.clips || [];
+  } catch { container.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px;">Error loading clips.</p>'; return; }
+  if (_clipsCache.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px;">No clips yet.</p>';
+    return;
+  }
+  container.innerHTML = _clipsCache.map(c => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:#fff;">${esc(c.clipper_name)} <span style="color:var(--muted);font-weight:400;">• ${esc(c.platform)}</span></div>
+        <div style="font-size:12px;color:var(--muted);">${Number(c.views).toLocaleString()} views${c.url ? ' • <a href="'+esc(c.url)+'" target="_blank" style="color:#8ab4ff;">link</a>' : ''}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button class="btn-sm" onclick="editClip(${c.id})">Edit</button>
+        <button class="btn-sm" onclick="deleteClip(${c.id})" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function editClip(id) {
+  const c = _clipsCache.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('clipperNameInput').value = c.clipper_name || '';
+  document.getElementById('clipPlatformInput').value = c.platform || '';
+  document.getElementById('clipViewsInput').value = c.views || 0;
+  document.getElementById('clipUrlInput').value = c.url || '';
+  _editingClipId = id;
+  document.getElementById('clipSubmitBtn').textContent = 'Save Changes';
+  document.getElementById('clipCancelEdit').style.display = 'inline-block';
+}
+
+function resetClipForm() {
+  _editingClipId = null;
+  document.getElementById('clipperNameInput').value = '';
+  document.getElementById('clipPlatformInput').value = '';
+  document.getElementById('clipViewsInput').value = '';
+  document.getElementById('clipUrlInput').value = '';
+  document.getElementById('clipSubmitBtn').textContent = 'Add Clip';
+  document.getElementById('clipCancelEdit').style.display = 'none';
+}
+
+async function submitClip() {
+  const clipper_name = document.getElementById('clipperNameInput').value.trim();
+  const platform = document.getElementById('clipPlatformInput').value;
+  const views = parseInt(document.getElementById('clipViewsInput').value) || 0;
+  const url = document.getElementById('clipUrlInput').value.trim();
+  if (!clipper_name || !platform) return alert('Clipper name and platform required');
+  const endpoint = _editingClipId ? '/api/admin/update-clip' : '/api/admin/add-clip';
+  const body = _editingClipId
+    ? { clip_id: _editingClipId, clipper_name, platform, views, url }
+    : { campaign_id: currentClipsCampaignId, clipper_name, platform, views, url };
+  const res = await fetch(endpoint, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (data.success) { resetClipForm(); await loadClipsList(currentClipsCampaignId); }
+  else { alert(data.message || 'Error saving clip'); }
+}
+
+async function deleteClip(clipId) {
+  if (!confirm('Delete this clip?')) return;
+  await fetch('/api/admin/delete-clip', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ clip_id: clipId }) });
+  if (_editingClipId === clipId) resetClipForm();
+  await loadClipsList(currentClipsCampaignId);
+}
 </script>
 </body>
 </html>
