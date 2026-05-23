@@ -12,6 +12,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from datetime import timedelta, datetime, date
 import re
+from urllib.parse import urlparse, unquote
 from flask_cors import CORS
 
 load_dotenv()
@@ -42,6 +43,19 @@ app.config['MYSQL_USER'] = os.getenv("MYSQL_USER", "root")
 app.config['MYSQL_PASSWORD'] = os.getenv("MYSQL_PASSWORD", "")
 app.config['MYSQL_DB'] = os.getenv("MYSQL_DB", "magnetisemedia")
 app.config['MYSQL_PORT'] = int(os.getenv("MYSQL_PORT", 3306))
+
+# If a full connection URL is provided it wins — lets you paste ONE variable on Render
+# instead of five. On Railway use MYSQL_PUBLIC_URL (the switchback.proxy.rlwy.net host),
+# NOT the internal mysql.railway.internal URL, since Render connects from outside Railway.
+_db_url = os.getenv("MYSQL_PUBLIC_URL") or os.getenv("MYSQL_URL") or os.getenv("DATABASE_URL")
+if _db_url:
+    _u = urlparse(_db_url)
+    if _u.hostname: app.config['MYSQL_HOST'] = _u.hostname
+    if _u.port:     app.config['MYSQL_PORT'] = _u.port
+    if _u.username: app.config['MYSQL_USER'] = _u.username
+    if _u.password: app.config['MYSQL_PASSWORD'] = unquote(_u.password)
+    if _u.path and len(_u.path) > 1: app.config['MYSQL_DB'] = _u.path.lstrip('/')
+
 app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 mysql = MySQL(app)
 
@@ -145,6 +159,14 @@ def create_tables():
             print("All tables created successfully.")
         except Exception as e:
             print(f"Table init error: {e}")
+
+
+# Run schema setup at import so the helper tables exist under gunicorn too
+# (Render/Railway run `gunicorn app:app`, so __main__ never executes).
+try:
+    create_tables()
+except Exception as _e:
+    print(f"create_tables at startup failed: {_e}")
 
 
 # ==========================================
@@ -1789,5 +1811,4 @@ def add_security_headers(response):
 
 if __name__ == '__main__':
     print("Magnetise Media — Starting on http://localhost:5000")
-    create_tables()
     app.run(debug=False)
