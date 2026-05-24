@@ -173,6 +173,8 @@ def create_tables():
                 # (a truncated hash = client can never log in).
                 "ALTER TABLE users MODIFY password_hash VARCHAR(255)",
                 "ALTER TABLE users MODIFY rejection_reason TEXT",
+                # Profile picture stored as a base64 data URL (survives Render redeploys)
+                "ALTER TABLE users ADD COLUMN profile_pic MEDIUMTEXT",
                 # Normalize any legacy status value left over from the old schema
                 "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
@@ -1224,7 +1226,7 @@ def dashboard_data():
     email = session['user_email']
     cur = mysql.connection.cursor()
     cur.execute("""
-        SELECT u.full_name, u.email, u.account_status, u.rejection_reason,
+        SELECT u.full_name, u.email, u.account_status, u.rejection_reason, u.profile_pic,
             c.campaign_id, c.campaign_name, c.budget_total,
             c.target_views, c.current_views, c.status,
             c.start_date, c.expected_end_date, c.cpm_rate
@@ -1275,6 +1277,23 @@ def dashboard_data():
     row['impersonator_email'] = session.get('impersonator_email')
 
     return jsonify({'success': True, 'data': row})
+
+@app.route('/api/dashboard/profile-pic', methods=['POST'])
+def update_profile_pic():
+    """Store a base64 data-URL profile picture for the logged-in client. Empty value clears it."""
+    if 'user_email' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+    data = request.get_json()
+    image = (data.get('image') or '').strip()
+    if image and not image.startswith('data:image/'):
+        return jsonify({'success': False, 'message': 'Invalid image format'}), 400
+    if len(image) > 3_000_000:  # ~3MB of base64; the UI resizes well below this
+        return jsonify({'success': False, 'message': 'Image too large — please choose a smaller one'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE users SET profile_pic=%s WHERE email=%s", (image or None, session['user_email']))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
 
 @app.route('/api/dashboard/top-clips')
 def dashboard_top_clips():

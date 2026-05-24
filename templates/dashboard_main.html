@@ -59,7 +59,7 @@
         .main-wrap.full{margin-left:0;}
         .page{display:none;padding:40px 36px 60px;}
         .page.active{display:block;}
-        .page-header{margin-bottom:28px;}
+        .page-header{margin-bottom:28px;text-align:center;}
         .page-header h1{font-size:30px;font-weight:800;color:#fff;letter-spacing:-0.5px;margin-bottom:4px;}
         .page-header h1 span{color:#ffffff;opacity:0.5;}
         .page-header p{color:#555;font-size:14px;}
@@ -117,7 +117,8 @@
         .info-key{color:#555;font-size:13px;}
         .info-val{color:#fff;font-size:13px;font-weight:600;}
         .info-val.cyan{color:#ffffff;}
-        .section-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+        .section-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:16px;display:flex;align-items:center;justify-content:center;text-align:center;gap:12px;}
+        .section-title::before{content:'';flex:1;height:1px;background:rgba(255,255,255,0.07);}
         .section-title::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.07);}
 
         /* ── GRAPH ── */
@@ -152,6 +153,21 @@
             background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);
             display:flex;align-items:center;justify-content:center;
             font-size:28px;font-weight:800;color:#fff;flex-shrink:0;
+            overflow:hidden;background-size:cover;background-position:center;
+        }
+        .pfp-wrap{position:relative;cursor:pointer;flex-shrink:0;}
+        .pfp-edit{
+            position:absolute;bottom:0;right:0;width:24px;height:24px;border-radius:50%;
+            background:#fff;color:#000;display:flex;align-items:center;justify-content:center;
+            border:2px solid #161616;transition:transform 0.2s;
+        }
+        .pfp-wrap:hover .pfp-edit{transform:scale(1.1);}
+        .sb-avatar{
+            width:34px;height:34px;border-radius:50%;flex-shrink:0;
+            background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);
+            display:flex;align-items:center;justify-content:center;
+            font-size:12px;font-weight:800;color:#fff;
+            overflow:hidden;background-size:cover;background-position:center;
         }
         .profile-meta h2{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px;}
         .profile-meta p{font-size:13px;color:#555;}
@@ -419,9 +435,12 @@
         </div>
     </nav>
     <div class="sb-bottom">
-        <div class="sb-user">
-            <div class="sb-user-name" id="sbName">—</div>
-            <div class="sb-user-email" id="sbEmail">—</div>
+        <div class="sb-user" style="display:flex;align-items:center;gap:10px;">
+            <div class="sb-avatar" id="sbAvatar"></div>
+            <div style="min-width:0;flex:1;">
+                <div class="sb-user-name" id="sbName">—</div>
+                <div class="sb-user-email" id="sbEmail">—</div>
+            </div>
         </div>
         <div class="sb-logout" onclick="handleLogout()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -460,7 +479,13 @@
         <div style="max-width:600px;">
             <div class="glass" style="margin-bottom:20px;">
                 <div class="profile-header">
-                    <div class="profile-avatar" id="profileAvatar">?</div>
+                    <div class="pfp-wrap" onclick="document.getElementById('pfpInput').click()" title="Change photo">
+                        <div class="profile-avatar" id="profileAvatar">?</div>
+                        <div class="pfp-edit">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                        </div>
+                    </div>
+                    <input type="file" id="pfpInput" accept="image/*" style="display:none;" onchange="handleProfilePicChange(event)">
                     <div class="profile-meta">
                         <h2 id="profileName">—</h2>
                         <p id="profileEmail" style="color:#555;font-size:13px;">—</p>
@@ -596,6 +621,7 @@ async function init(){
         if(d.impersonating){showImpersonationBanner(d.impersonator_email);}
         document.getElementById('sbName').textContent=d.full_name||'—';
         document.getElementById('sbEmail').textContent=d.email||'—';
+        applyAvatars(d);
         if(window.innerWidth<=640){_sidebarOpen=false;document.getElementById('sidebar').classList.add('closed');document.getElementById('mainWrap').classList.add('full');document.getElementById('toggleBtn').classList.add('sidebar-closed');}
         if(d.account_status==='REJECTED'){showRejected(d.rejection_reason);return;}
         if(!d.campaign_name){showPending();return;}
@@ -1164,8 +1190,7 @@ async function renderAnalytics(d){
     }
 
 function fillAccount(d){
-    const initials=(d.full_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-    document.getElementById('profileAvatar').textContent=initials;
+    applyAvatars(d);
     document.getElementById('profileName').textContent=d.full_name||'—';
     document.getElementById('profileEmail').textContent=d.email||'—';
     document.getElementById('accTotalViews').textContent=Number(d.current_views||0).toLocaleString();
@@ -1257,6 +1282,50 @@ function showRejected(reason){
 function showPending(){
     document.getElementById('sbEmail').textContent='{{ email }}';
     document.getElementById('dashboardContent').innerHTML=`<div class="glass"><div class="pending-state"><div class="pending-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h3>Campaign Pending</h3><p>Your account is set up but your campaign has not been created yet. Our team will reach out soon to get things started.</p><div class="contact-box" style="margin-top:24px;"><p>Need help?</p><a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a></div></div></div>`;
+}
+
+function avatarInitials(name){return String(name||'?').trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?';}
+
+function applyAvatars(d){
+    const pic=d&&d.profile_pic;
+    const initials=avatarInitials(d&&d.full_name);
+    ['profileAvatar','sbAvatar'].forEach(id=>{
+        const el=document.getElementById(id);if(!el)return;
+        if(pic){el.style.backgroundImage="url('"+pic+"')";el.textContent='';}
+        else{el.style.backgroundImage='';el.textContent=initials;}
+    });
+}
+
+function handleProfilePicChange(e){
+    const file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    if(!file.type.startsWith('image/')){alert('Please choose an image file.');return;}
+    const reader=new FileReader();
+    reader.onload=ev=>{
+        const img=new Image();
+        img.onload=()=>{
+            const size=256,canvas=document.createElement('canvas');
+            canvas.width=size;canvas.height=size;
+            const ctx=canvas.getContext('2d');
+            const min=Math.min(img.width,img.height);          // square cover-crop
+            const sx=(img.width-min)/2,sy=(img.height-min)/2;
+            ctx.drawImage(img,sx,sy,min,min,0,0,size,size);
+            saveProfilePic(canvas.toDataURL('image/jpeg',0.85));
+        };
+        img.onerror=()=>alert('Could not read that image.');
+        img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value='';   // allow re-selecting the same file later
+}
+
+async function saveProfilePic(dataUrl){
+    try{
+        const res=await fetch('/api/dashboard/profile-pic',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})});
+        const data=await res.json();
+        if(data.success){if(_dashData)_dashData.profile_pic=dataUrl;applyAvatars(_dashData||{profile_pic:dataUrl});}
+        else{alert(data.message||'Upload failed.');}
+    }catch(e){alert('Connection error while uploading.');}
 }
 
 function showImpersonationBanner(adminEmail){
