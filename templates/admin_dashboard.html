@@ -741,8 +741,53 @@
     <div class="admin-page" id="page-inspect"><div class="admin-page-head"><h1>Inspect Campaign</h1><p>Pick one of your running campaigns to view stats &amp; act</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Campaign picker + stats land here.</p></div></div>
     <div class="admin-page" id="page-appeals"><div class="admin-page-head"><h1>Appeals</h1><p>Client clip appeals awaiting action</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Appeals (with 48h countdown) land here.</p></div></div>
     <div class="admin-page" id="page-permits"><div class="admin-page-head"><h1>Permits</h1><p>Campaign-manager requests for heavy actions</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Permit requests + approve/deny land here.</p></div></div>
-    <div class="admin-page" id="page-roles"><div class="admin-page-head"><h1>Roles</h1><p>Create &amp; manage admins, assign campaigns</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Admin account creation + campaign assignment lands here.</p></div></div>
-    <div class="admin-page" id="page-settings"><div class="admin-page-head"><h1>Account Settings</h1><p>Your password and profile picture</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Change password + profile picture land here.</p></div></div>
+    <div class="admin-page" id="page-roles">
+        <div class="admin-page-head"><h1>Roles</h1><p>Create &amp; manage campaign managers, assign campaigns</p></div>
+        <div class="section">
+            <div class="section-header"><div class="section-title">Create Campaign Manager</div></div>
+            <div class="table-card" style="padding:20px;">
+                <div class="field-row">
+                    <div class="field"><label>Name</label><input type="text" id="newAdminName" placeholder="Manager name"/></div>
+                    <div class="field"><label>Email</label><input type="email" id="newAdminEmail" placeholder="manager@email.com"/></div>
+                </div>
+                <div class="field-row">
+                    <div class="field"><label>Password</label>
+                        <div style="display:flex;gap:8px;"><input type="text" id="newAdminPw" style="flex:1;font-family:'Courier New',monospace;"/><button class="btn-regen" onclick="document.getElementById('newAdminPw').value=genPw()">Generate</button></div>
+                    </div>
+                    <div class="field" style="display:flex;align-items:flex-end;"><button class="btn-modal-primary" style="flex:none;" id="createAdminBtn" onclick="createAdmin()">Create Account</button></div>
+                </div>
+                <div id="createAdminMsg" class="msg-box"></div>
+            </div>
+        </div>
+        <div class="section">
+            <div class="section-header"><div class="section-title">Campaign Managers <span class="badge-count" id="adminsBadge">0</span></div></div>
+            <div class="table-card"><div class="table-wrap">
+                <table>
+                    <thead><tr><th>Manager</th><th>Email</th><th>Campaigns</th><th>Actions</th></tr></thead>
+                    <tbody id="adminsTableBody"><tr><td colspan="4"><div class="loading">Loading...</div></td></tr></tbody>
+                </table>
+            </div></div>
+        </div>
+    </div>
+    <div class="admin-page" id="page-settings">
+        <div class="admin-page-head"><h1>Account Settings</h1><p>Your password and profile picture</p></div>
+        <div class="section" style="max-width:520px;">
+            <div class="table-card" style="padding:24px;">
+                <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+                    <div onclick="document.getElementById('adminPfpInput').click()" title="Change photo" style="position:relative;cursor:pointer;">
+                        <div class="sb-avatar" id="settingsAvatar" style="width:64px;height:64px;font-size:22px;"></div>
+                        <div style="position:absolute;bottom:0;right:0;width:22px;height:22px;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;border:2px solid var(--card);font-size:11px;">✎</div>
+                    </div>
+                    <input type="file" id="adminPfpInput" accept="image/*" style="display:none;" onchange="handleAdminPfp(event)">
+                    <div style="min-width:0;"><div id="settingsName" style="font-weight:700;color:#fff;"></div><div id="settingsEmail" style="color:var(--muted);font-size:13px;"></div></div>
+                </div>
+                <div class="field"><label>New Password</label><input type="password" id="ownNewPw" placeholder="Min 8 characters"/></div>
+                <div class="field"><label>Confirm Password</label><input type="password" id="ownNewPw2" placeholder="Re-enter new password"/></div>
+                <div id="ownPwMsg" class="msg-box"></div>
+                <button class="btn-modal-primary" style="flex:none;" id="ownPwBtn" onclick="changeOwnPassword()">Update Password</button>
+            </div>
+        </div>
+    </div>
 
 </div>
 
@@ -1011,6 +1056,43 @@
     </div>
 </div>
 
+<!-- ASSIGN CAMPAIGN MODAL -->
+<div class="modal-overlay" id="assignModal">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header"><div class="modal-title">Assign Campaign</div><button class="modal-close" onclick="closeModal('assignModal')">×</button></div>
+        <div class="modal-client-info" id="assignInfo"></div>
+        <div class="field"><label>Campaign</label>
+            <select id="assignCampaignSelect"></select>
+        </div>
+        <div id="assignMsg" class="msg-box"></div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModal('assignModal')">Cancel</button>
+            <button class="btn-modal-primary" id="assignBtn" onclick="submitAssign()">Assign</button>
+        </div>
+    </div>
+</div>
+
+<!-- SET MANAGER PASSWORD MODAL -->
+<div class="modal-overlay" id="adminPwModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header"><div class="modal-title">Set Manager Password</div><button class="modal-close" onclick="closeModal('adminPwModal')">×</button></div>
+        <div class="modal-client-info" id="adminPwInfo"></div>
+        <div class="field" style="margin-top:14px;"><label>New Password</label>
+            <div style="display:flex;gap:8px;"><input type="text" id="adminNewPw" style="flex:1;font-family:'Courier New',monospace;"/><button class="btn-regen" onclick="document.getElementById('adminNewPw').value=genPw()">Generate</button></div>
+        </div>
+        <div id="adminPwMsg" class="msg-box"></div>
+        <div class="modal-actions"><button class="btn-modal-cancel" onclick="closeModal('adminPwModal')">Cancel</button><button class="btn-modal-primary" id="adminPwBtn" onclick="submitAdminPassword()">Set Password</button></div>
+    </div>
+</div>
+
+<!-- ADMIN PROFILE MODAL -->
+<div class="modal-overlay" id="adminProfileModal">
+    <div class="modal"><div class="modal-header"><div class="modal-title" id="adminProfileTitle">Manager</div><button class="modal-close" onclick="closeModal('adminProfileModal')">×</button></div>
+        <div id="adminProfileBody"></div>
+        <div class="modal-actions"><button class="btn-modal-primary" onclick="closeModal('adminProfileModal')">Close</button></div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1020,6 +1102,7 @@
 let currentClient = null, lastCampaignData = null;
 let _clientsById = {};   // user_id -> merged row (from /pending and /clients); actions look up by id
 function C(uid){ return _clientsById[uid] || {}; }
+let _me = {}, _campaignsCache = [];   // current admin identity + campaigns (for assign dropdown)
 
 document.addEventListener('DOMContentLoaded', () => { checkAdmin(); setTodayDate(); generatePassword(); });
 
@@ -1029,14 +1112,34 @@ async function checkAdmin() {
         if (!res.ok) { window.location.href = '/admin'; return; }
         const data = await res.json();
         if (!data.authenticated) { window.location.href = '/admin'; return; }
+        _me = data;
         const email = data.email || '';
         document.getElementById('adminEmailDisplay').textContent = email;
         document.getElementById('adminNameDisplay').textContent = data.name || email.split('@')[0] || 'Admin';
-        const av = document.getElementById('adminAvatar');
-        if (av) av.textContent = (email[0] || 'A').toUpperCase();
+        applyAdminAvatar(data);
         applyRoleVisibility(data.role || 'super');
+        if (data.viewing_as) showAdminImpersonationBanner(data.name || email);
         loadData();
     } catch { window.location.href = '/admin'; }
+}
+
+function applyAdminAvatar(d){
+    const pic = d && d.profile_pic;
+    const init = ((d && (d.name || d.email)) || 'A')[0].toUpperCase();
+    ['adminAvatar','settingsAvatar'].forEach(id=>{
+        const el=document.getElementById(id); if(!el) return;
+        if(pic){ el.style.backgroundImage="url('"+pic+"')"; el.textContent=''; }
+        else { el.style.backgroundImage=''; el.textContent=init; }
+    });
+}
+
+function showAdminImpersonationBanner(name){
+    if(document.getElementById('adminImpersonationBanner')) return;
+    const bar=document.createElement('div');
+    bar.id='adminImpersonationBanner';
+    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#ffb300;color:#000;font-size:13px;font-weight:700;padding:9px 16px;display:flex;align-items:center;justify-content:center;gap:14px;';
+    bar.innerHTML='<span>Viewing as manager: '+esc(name)+'</span><a href="/admin/stop-impersonate-admin" style="background:#000;color:#fff;text-decoration:none;font-weight:700;padding:5px 14px;border-radius:6px;">Exit to super admin</a>';
+    document.body.appendChild(bar);
 }
 
 function toggleSidebar(){
@@ -1051,6 +1154,8 @@ function showPage(name, el){
     document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));
     const pg=document.getElementById('page-'+name); if(pg) pg.classList.add('active');
     if(el) el.classList.add('active');
+    if(name==='roles') loadAdmins();
+    if(name==='settings') fillSettings();
 }
 
 // Phase 2 will scope sections per role using the admin's role from /api/admin/check.
@@ -1059,11 +1164,136 @@ function applyRoleVisibility(role){
     const pill=document.getElementById('rolePill');
     if(role==='manager'){
         if(pill) pill.textContent='MANAGER';
-        ['nav-signups','nav-clients','nav-sync','nav-allcampaigns','nav-permits','nav-roles']
+        ['nav-signups','nav-sync','nav-allcampaigns','nav-permits','nav-roles']
             .forEach(id=>{const e=document.getElementById(id); if(e) e.style.display='none';});
     } else {
         if(pill) pill.textContent='SUPER ADMIN';
     }
+}
+
+// ---- ROLES / admin management ----
+async function loadAdmins(){
+    const tb=document.getElementById('adminsTableBody'); if(!tb) return;
+    try{
+        const [ar,cr]=await Promise.all([fetch('/api/admin/admins'),fetch('/api/admin/campaigns')]);
+        const adata=await ar.json(); const cdata=await cr.json();
+        _campaignsCache=cdata.campaigns||[];
+        const admins=adata.admins||[];
+        document.getElementById('adminsBadge').textContent=admins.length;
+        if(admins.length===0){tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><p>No campaign managers yet</p></div></td></tr>';return;}
+        tb.innerHTML=admins.map(a=>`<tr>
+            <td><strong>${esc(a.name||'—')}</strong></td>
+            <td class="td-email">${esc(a.email)}</td>
+            <td class="td-muted">${a.campaigns||0}</td>
+            <td><div class="action-btns">
+                <button class="btn-sm" onclick="openAdminProfile(${a.id})">Profile</button>
+                <button class="btn-sm" onclick="openAssign(${a.id},'${esc(a.email)}','${esc(a.name||'')}')">Assign Campaign</button>
+                <button class="btn-sm" onclick="openAdminPw(${a.id},'${esc(a.name||a.email)}')">Set Password</button>
+                <button class="btn-sm btn-view" onclick="viewAsAdmin(${a.id})">View as</button>
+                <button class="btn-sm" onclick="deleteAdmin(${a.id},'${esc(a.name||a.email)}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Delete</button>
+            </div></td>
+        </tr>`).join('');
+    }catch{tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><p>Error loading</p></div></td></tr>';}
+}
+
+async function createAdmin(){
+    const name=document.getElementById('newAdminName').value.trim();
+    const email=document.getElementById('newAdminEmail').value.trim();
+    const password=document.getElementById('newAdminPw').value.trim();
+    const msg=document.getElementById('createAdminMsg'); const btn=document.getElementById('createAdminBtn');
+    btn.disabled=true;
+    try{
+        const res=await fetch('/api/admin/admins/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password})});
+        const data=await res.json();
+        if(data.success){showModalMsg(msg,'Manager created — share the email + password.','success');document.getElementById('newAdminName').value='';document.getElementById('newAdminEmail').value='';document.getElementById('newAdminPw').value='';loadAdmins();}
+        else showModalMsg(msg,data.message||'Error','error');
+    }catch{showModalMsg(msg,'Connection error','error');}
+    finally{btn.disabled=false;}
+}
+
+let _assignAdminEmail=null;
+function openAssign(id,email,name){
+    _assignAdminEmail=email;
+    document.getElementById('assignInfo').innerHTML=`<p>Assign a campaign to <strong>${esc(name||email)}</strong></p>`;
+    const sel=document.getElementById('assignCampaignSelect');
+    sel.innerHTML=_campaignsCache.length?_campaignsCache.map(c=>`<option value="${esc(c.campaign_id)}">${esc(c.campaign_name||c.campaign_id)}${c.assigned_admin_email?(' — now: '+esc(c.assigned_admin_email)):''}</option>`).join(''):'<option value="">No campaigns yet</option>';
+    document.getElementById('assignMsg').style.display='none';
+    document.getElementById('assignModal').classList.add('open');
+}
+async function submitAssign(){
+    const campaign_id=document.getElementById('assignCampaignSelect').value;
+    const msg=document.getElementById('assignMsg');
+    if(!campaign_id){showModalMsg(msg,'No campaign selected','error');return;}
+    try{
+        const res=await fetch('/api/admin/assign-campaign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign_id,admin_email:_assignAdminEmail})});
+        const data=await res.json();
+        if(data.success){closeModal('assignModal');showToast('Campaign assigned.');loadAdmins();}
+        else showModalMsg(msg,data.message||'Error','error');
+    }catch{showModalMsg(msg,'Connection error','error');}
+}
+
+let _adminPwId=null;
+function openAdminPw(id,name){_adminPwId=id;document.getElementById('adminPwInfo').innerHTML=`<p>Set a new password for <strong>${esc(name)}</strong></p>`;document.getElementById('adminNewPw').value=genPw();document.getElementById('adminPwMsg').style.display='none';document.getElementById('adminPwModal').classList.add('open');}
+async function submitAdminPassword(){
+    const msg=document.getElementById('adminPwMsg'); const pw=document.getElementById('adminNewPw').value.trim();
+    if(pw.length<8){showModalMsg(msg,'Min 8 characters','error');return;}
+    try{
+        const res=await fetch('/api/admin/admins/set-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:_adminPwId,new_password:pw})});
+        const data=await res.json();
+        if(data.success)showModalMsg(msg,'Password updated — share it with the manager.','success');
+        else showModalMsg(msg,data.message||'Error','error');
+    }catch{showModalMsg(msg,'Connection error','error');}
+}
+
+async function viewAsAdmin(id){
+    if(!confirm('View the panel exactly as this manager? You can exit from the banner at the bottom.'))return;
+    try{const res=await fetch('/api/admin/impersonate-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const data=await res.json();if(data.success)window.location.href=data.redirect||'/admin/dashboard';else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
+}
+async function deleteAdmin(id,name){
+    if(!confirm('Delete manager '+name+'? Their assigned campaigns return to you.'))return;
+    try{const res=await fetch('/api/admin/admins/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const data=await res.json();if(data.success){showToast('Manager deleted.');loadAdmins();}else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
+}
+async function openAdminProfile(id){
+    try{
+        const res=await fetch('/api/admin/admins/profile/'+id);const data=await res.json();
+        if(!data.success){showToast('Error','error');return;}
+        const a=data.admin; const camps=a.assigned_campaigns||[];
+        document.getElementById('adminProfileTitle').textContent=a.name||a.email;
+        document.getElementById('adminProfileBody').innerHTML=`
+            <div class="modal-client-info"><p>${esc(a.email)}</p><p style="margin-top:4px;">Created: ${esc((a.created_at||'').slice(0,10))}</p></div>
+            <div style="font-size:13px;font-weight:700;color:#fff;margin:14px 0 8px;">Assigned Campaigns (${camps.length})</div>
+            ${camps.length?camps.map(c=>`<div class="creds-row"><span class="creds-label">${esc(c.campaign_name||c.campaign_id)}</span><span class="creds-value">${esc(c.status||'')}</span></div>`).join(''):'<p style="color:var(--muted);font-size:13px;">None assigned.</p>'}`;
+        document.getElementById('adminProfileModal').classList.add('open');
+    }catch{showToast('Connection error','error');}
+}
+
+// ---- Account settings (own) ----
+function fillSettings(){
+    document.getElementById('settingsName').textContent=_me.name||'Admin';
+    document.getElementById('settingsEmail').textContent=_me.email||'';
+    applyAdminAvatar(_me);
+}
+async function changeOwnPassword(){
+    const pw=document.getElementById('ownNewPw').value.trim();const pw2=document.getElementById('ownNewPw2').value.trim();const msg=document.getElementById('ownPwMsg');
+    if(pw.length<8){showModalMsg(msg,'Min 8 characters','error');return;}
+    if(pw!==pw2){showModalMsg(msg,'Passwords do not match','error');return;}
+    try{const res=await fetch('/api/admin/me/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_password:pw})});const data=await res.json();
+        if(data.success){showModalMsg(msg,'Password updated.','success');document.getElementById('ownNewPw').value='';document.getElementById('ownNewPw2').value='';}
+        else showModalMsg(msg,data.message||'Error','error');
+    }catch{showModalMsg(msg,'Connection error','error');}
+}
+function handleAdminPfp(e){
+    const file=e.target.files&&e.target.files[0];if(!file)return;
+    if(!file.type.startsWith('image/')){alert('Please choose an image.');return;}
+    const reader=new FileReader();
+    reader.onload=ev=>{const img=new Image();img.onload=()=>{const s=256,cv=document.createElement('canvas');cv.width=s;cv.height=s;const ctx=cv.getContext('2d');const m=Math.min(img.width,img.height);ctx.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,s,s);saveAdminPfp(cv.toDataURL('image/jpeg',0.85));};img.src=ev.target.result;};
+    reader.readAsDataURL(file);e.target.value='';
+}
+async function saveAdminPfp(dataUrl){
+    try{const res=await fetch('/api/admin/me/profile-pic',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})});const data=await res.json();
+        if(data.success){_me.profile_pic=dataUrl;applyAdminAvatar(_me);showToast('Picture updated.');}
+        else showToast(data.message||'Error','error');
+    }catch{showToast('Connection error','error');}
 }
 
 async function loadData() { loadPending(); loadAllClients(); loadStats(); }

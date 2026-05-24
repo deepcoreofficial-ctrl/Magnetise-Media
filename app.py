@@ -154,6 +154,21 @@ def create_tables():
                 )
             """)
 
+            # Admin accounts. The super admin is env-based (code-fixed); rows here are
+            # campaign managers. A row for the super email may also exist to hold a
+            # changed password / profile picture.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS admins (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255),
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255),
+                    role VARCHAR(20) DEFAULT 'manager',
+                    profile_pic MEDIUMTEXT,
+                    created_at DATETIME DEFAULT NOW()
+                )
+            """)
+
             # Widen view columns INT -> BIGINT so large counts don't overflow (error 1264).
             # campaigns/users pre-exist so these are ALTERs; each is guarded so one failure
             # (e.g. table missing on a fresh DB) won't abort the rest.
@@ -180,6 +195,8 @@ def create_tables():
                 "ALTER TABLE top_clips ADD COLUMN reject_reason TEXT",
                 "ALTER TABLE clips ADD COLUMN status VARCHAR(20) DEFAULT 'pending'",
                 "ALTER TABLE clips ADD COLUMN reject_reason TEXT",
+                # Which admin/manager a campaign is assigned to (NULL = super admin)
+                "ALTER TABLE campaigns ADD COLUMN assigned_admin_email VARCHAR(255)",
                 # Normalize any legacy status value left over from the old schema
                 "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
@@ -582,37 +599,105 @@ def admin_dashboard():
 # ADMIN API
 # ==========================================
 
+def eff_admin():
+    """Effective admin identity. Honors the super admin's 'view as manager' mode."""
+    if session.get('acting_as_email'):
+        return {'email': session['acting_as_email'], 'role': 'manager',
+                'name': session.get('acting_as_name'), 'viewing_as': True,
+                'real_email': session.get('admin_email')}
+    return {'email': session.get('admin_email'), 'role': session.get('admin_role', 'super'),
+            'name': session.get('admin_name'), 'viewing_as': False}
+
+def is_super():
+    """True only for the real super admin (not while viewing-as a manager)."""
+    return bool(session.get('admin_logged_in')) and eff_admin()['role'] == 'super'
+
+def can_access_campaign(cur, campaign_id):
+    """Super can touch any campaign; a manager only campaigns assigned to them."""
+    a = eff_admin()
+    if a['role'] == 'super':
+        return True
+    cur.execute("SELECT assigned_admin_email FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+    row = cur.fetchone()
+    return bool(row and row.get('assigned_admin_email') == a['email'])
+
 @app.route('/api/admin/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def admin_login():
     data = request.get_json()
     email = data.get('email', '').strip()
     password = data.get('password', '').strip()
+    email_l = email.lower()
 
-    if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
-        session.permanent = True
-        session['admin_logged_in'] = True
-        session['admin_email'] = email
-        return jsonify({'success': True})
+    cur = mysql.connection.cursor()
+
+    # Super admin — code-fixed email. Env password always works (recovery); a changed
+    # password saved in the admins row also works.
+    if email_l == ADMIN_EMAIL.lower() and ADMIN_EMAIL:
+        cur.execute("SELECT name, password_hash FROM admins WHERE email=%s", (ADMIN_EMAIL,))
+        srow = cur.fetchone()
+        cur.close()
+        ok = (password == ADMIN_PASSWORD)
+        if not ok and srow and srow.get('password_hash'):
+            try: ok = pbkdf2_sha256.verify(password, srow['password_hash'])
+            except Exception: ok = False
+        if ok:
+            session.permanent = True
+            session['admin_logged_in'] = True
+            session['admin_email'] = ADMIN_EMAIL
+            session['admin_role'] = 'super'
+            session['admin_name'] = (srow.get('name') if srow else None) or 'Super Admin'
+            session.pop('acting_as_email', None); session.pop('acting_as_name', None)
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': 'Invalid credentials'})
+
+    # Campaign manager — DB account
+    cur.execute("SELECT name, password_hash, role FROM admins WHERE email=%s", (email_l,))
+    row = cur.fetchone()
+    cur.close()
+    if row and row.get('password_hash') and row.get('role') != 'super':
+        try: ok = pbkdf2_sha256.verify(password, row['password_hash'])
+        except Exception: ok = False
+        if ok:
+            session.permanent = True
+            session['admin_logged_in'] = True
+            session['admin_email'] = email_l
+            session['admin_role'] = 'manager'
+            session['admin_name'] = row.get('name') or email_l.split('@')[0]
+            session.pop('acting_as_email', None); session.pop('acting_as_name', None)
+            return jsonify({'success': True})
 
     return jsonify({'success': False, 'message': 'Invalid credentials'})
 
 @app.route('/api/admin/check')
 def admin_check():
     if session.get('admin_logged_in'):
-        return jsonify({'authenticated': True, 'email': session.get('admin_email', '')})
+        a = eff_admin()
+        # profile pic for the effective admin (super or manager)
+        pic = None
+        try:
+            cur = mysql.connection.cursor()
+            cur.execute("SELECT profile_pic FROM admins WHERE email=%s", (a['email'],))
+            r = cur.fetchone()
+            cur.close()
+            pic = r.get('profile_pic') if r else None
+        except Exception:
+            pic = None
+        return jsonify({'authenticated': True, 'email': a['email'], 'role': a['role'],
+                        'name': a['name'], 'viewing_as': a['viewing_as'], 'profile_pic': pic})
     return jsonify({'authenticated': False}), 401
 
 @app.route('/api/admin/logout', methods=['POST'])
 def admin_logout():
-    session.pop('admin_logged_in', None)
-    session.pop('admin_email', None)
+    for k in ('admin_logged_in', 'admin_email', 'admin_role', 'admin_name',
+              'acting_as_email', 'acting_as_name'):
+        session.pop(k, None)
     return jsonify({'success': True})
 
 @app.route('/api/admin/pending')
 def pending():
-    if not session.get('admin_logged_in'):
-        return jsonify({'error': 'Unauthorized'}), 401
+    if not is_super():
+        return jsonify({'error': 'Unauthorized'}), 403
     cur = mysql.connection.cursor()
     cur.execute("SELECT user_id, full_name, email, created_at FROM users WHERE account_status='PENDING' ORDER BY created_at DESC")
     users = cur.fetchall()
@@ -625,7 +710,18 @@ def pending():
 def admin_stats():
     if not session.get('admin_logged_in'):
         return jsonify({'success': False}), 401
+    a = eff_admin()
     cur = mysql.connection.cursor()
+    if a['role'] != 'super':
+        # Manager: only their assigned campaigns
+        cur.execute("SELECT COUNT(*) cnt FROM campaigns WHERE status='ACTIVE' AND assigned_admin_email=%s", (a['email'],))
+        active = cur.fetchone()['cnt']
+        cur.execute("SELECT COUNT(*) cnt FROM campaigns WHERE status='COMPLETED' AND assigned_admin_email=%s", (a['email'],))
+        completed = cur.fetchone()['cnt']
+        cur.execute("SELECT COUNT(*) cnt FROM campaigns WHERE assigned_admin_email=%s", (a['email'],))
+        total = cur.fetchone()['cnt']
+        cur.close()
+        return jsonify({'success': True, 'pending': 0, 'active': active, 'total': total, 'completed': completed})
     cur.execute("SELECT account_status, COUNT(*) as cnt FROM users GROUP BY account_status")
     rows = cur.fetchall()
     cur.execute("SELECT COUNT(*) as cnt FROM campaigns WHERE status='ACTIVE'")
@@ -646,16 +742,20 @@ def admin_stats():
 def admin_clients():
     if not session.get('admin_logged_in'):
         return jsonify({'success': False}), 401
+    a = eff_admin()
     cur = mysql.connection.cursor()
-    cur.execute("""
+    base = """
         SELECT u.user_id, u.full_name, u.email, u.account_status, u.rejection_reason,
                c.campaign_id, c.campaign_name, c.current_views, c.target_views,
                c.budget_total, c.cpm_rate, c.status AS campaign_status,
-               c.start_date, c.expected_end_date, c.login_email_sent_at
+               c.start_date, c.expected_end_date, c.login_email_sent_at, c.assigned_admin_email
         FROM users u
         LEFT JOIN campaigns c ON u.campaign_id = c.campaign_id
-        ORDER BY u.created_at DESC
-    """)
+    """
+    if a['role'] == 'super':
+        cur.execute(base + " ORDER BY u.created_at DESC")
+    else:
+        cur.execute(base + " WHERE c.assigned_admin_email=%s ORDER BY u.created_at DESC", (a['email'],))
     clients = cur.fetchall()
     cur.close()
     for c in clients:
@@ -669,8 +769,8 @@ def admin_clients():
 
 @app.route('/api/admin/reject', methods=['POST'])
 def reject():
-    if not session.get('admin_logged_in'):
-        return jsonify({'success': False}), 401
+    if not is_super():
+        return jsonify({'success': False}), 403
     data = request.get_json()
     email = data.get('email')
     reason = data.get('reason', '')
@@ -682,8 +782,8 @@ def reject():
 
 @app.route('/api/admin/create-campaign', methods=['POST'])
 def admin_create_campaign():
-    if not session.get('admin_logged_in'):
-        return jsonify({'success': False}), 401
+    if not is_super():
+        return jsonify({'success': False}), 403
     data = request.get_json()
     client_email = data.get('client_email')
     campaign_name = data.get('campaign_name')
@@ -739,6 +839,9 @@ def admin_update_campaign():
         return jsonify({'success': False, 'message': 'campaign_id required'}), 400
 
     cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close()
+        return jsonify({'success': False, 'message': 'Not allowed for this campaign'}), 403
     cur.execute("SELECT target_views, current_views FROM campaigns WHERE campaign_id=%s", (campaign_id,))
     existing = cur.fetchone()
     if not existing:
@@ -762,6 +865,9 @@ def admin_update_campaign():
             values.append(val)
 
     new_status = data.get('status')
+    if new_status == 'COMPLETED' and eff_admin()['role'] != 'super':
+        cur.close()
+        return jsonify({'success': False, 'message': 'Ending a campaign needs a super-admin permit'}), 403
     if new_status in ('ACTIVE', 'COMPLETED'):
         set_clauses.append("status=%s")
         values.append(new_status)
@@ -793,8 +899,8 @@ def admin_update_campaign():
 
 @app.route('/api/admin/send-email', methods=['POST'])
 def admin_send_email():
-    if not session.get('admin_logged_in'):
-        return jsonify({'success': False}), 401
+    if not is_super():
+        return jsonify({'success': False}), 403
 
     data = request.get_json()
     client_email = data.get('client_email')
@@ -869,8 +975,8 @@ def admin_send_email():
 
 @app.route('/api/admin/complete-campaign', methods=['POST'])
 def admin_complete_campaign():
-    if not session.get('admin_logged_in'):
-        return jsonify({'success': False}), 401
+    if not is_super():
+        return jsonify({'success': False}), 403
     data = request.get_json()
     campaign_id = data.get('campaign_id')
     cur = mysql.connection.cursor()
@@ -889,6 +995,8 @@ def update_views():
     campaign_id = data.get('campaign_id')
     current_views = data.get('current_views')
     cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close(); return jsonify({'success': False, 'message': 'Not allowed'}), 403
     cur.execute("UPDATE campaigns SET current_views=%s WHERE campaign_id=%s", (current_views, campaign_id))
     cur.execute("INSERT INTO views_history (campaign_id, views) VALUES (%s, %s)", (campaign_id, current_views))
     # Get target for milestone check
@@ -924,6 +1032,8 @@ def admin_add_clip():
             yt_video_id = match.group(1)
 
     cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close(); return jsonify({'success': False, 'message': 'Not allowed'}), 403
     # Admin-added clips are approved immediately (admin is trusted)
     cur.execute("""
         INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
@@ -1016,8 +1126,8 @@ def admin_update_clip():
 
 @app.route('/api/admin/reactivate-client', methods=['POST'])
 def reactivate_client():
-    if not session.get('admin_logged_in'):
-        return jsonify({'success': False}), 401
+    if not is_super():
+        return jsonify({'success': False}), 403
     data = request.get_json()
     user_id = data.get('user_id')
     try:
@@ -1033,8 +1143,8 @@ def reactivate_client():
 
 @app.route('/api/admin/delete-client', methods=['POST'])
 def delete_client():
-    if not session.get('admin_logged_in'):
-        return jsonify({'success': False}), 401
+    if not is_super():
+        return jsonify({'success': False}), 403
     data = request.get_json()
     user_id = data.get('user_id')
     try:
@@ -1104,6 +1214,196 @@ def admin_stop_impersonate():
     session.pop('user_email', None)
     session.pop('impersonator_email', None)
     return redirect('/admin/dashboard')
+
+# ==========================================
+# ROLES / ADMIN MANAGEMENT (super admin only)
+# ==========================================
+
+@app.route('/api/admin/campaigns')
+def admin_campaigns_list():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("""SELECT campaign_id, campaign_name, status, assigned_admin_email
+                   FROM campaigns ORDER BY created_at DESC""")
+    rows = cur.fetchall()
+    cur.close()
+    return jsonify({'success': True, 'campaigns': rows})
+
+@app.route('/api/admin/admins')
+def admin_list_admins():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id, name, email, role, profile_pic, created_at FROM admins WHERE role!='super' ORDER BY created_at DESC")
+    admins = cur.fetchall()
+    cur.execute("SELECT assigned_admin_email, COUNT(*) c FROM campaigns WHERE assigned_admin_email IS NOT NULL GROUP BY assigned_admin_email")
+    counts = {r['assigned_admin_email']: r['c'] for r in cur.fetchall()}
+    cur.close()
+    for a in admins:
+        a['created_at'] = str(a['created_at'])
+        a['campaigns'] = counts.get(a['email'], 0)
+    return jsonify({'success': True, 'admins': admins})
+
+@app.route('/api/admin/admins/create', methods=['POST'])
+def admin_create_admin():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    if not email or not password:
+        return jsonify({'success': False, 'message': 'Email and password required'}), 400
+    if len(password) < 8:
+        return jsonify({'success': False, 'message': 'Password must be at least 8 characters'}), 400
+    if email == ADMIN_EMAIL.lower():
+        return jsonify({'success': False, 'message': 'That email is the super admin'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+    if cur.fetchone():
+        cur.close()
+        return jsonify({'success': False, 'message': 'An admin with this email already exists'}), 400
+    cur.execute("INSERT INTO admins (name, email, password_hash, role) VALUES (%s,%s,%s,'manager')",
+                (name or email.split('@')[0], email, pbkdf2_sha256.hash(password)))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/admins/delete', methods=['POST'])
+def admin_delete_admin():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    admin_id = request.get_json().get('id')
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT email, role FROM admins WHERE id=%s", (admin_id,))
+    row = cur.fetchone()
+    if not row or row['role'] == 'super':
+        cur.close()
+        return jsonify({'success': False, 'message': 'Cannot delete'}), 400
+    cur.execute("UPDATE campaigns SET assigned_admin_email=NULL WHERE assigned_admin_email=%s", (row['email'],))
+    cur.execute("DELETE FROM admins WHERE id=%s", (admin_id,))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/admins/set-password', methods=['POST'])
+def admin_set_admin_password():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    data = request.get_json()
+    new_password = data.get('new_password') or ''
+    if len(new_password) < 8:
+        return jsonify({'success': False, 'message': 'Password must be at least 8 characters'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE admins SET password_hash=%s WHERE id=%s AND role!='super'",
+                (pbkdf2_sha256.hash(new_password), data.get('id')))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/admins/profile/<int:admin_id>')
+def admin_admin_profile(admin_id):
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id, name, email, role, profile_pic, created_at FROM admins WHERE id=%s", (admin_id,))
+    a = cur.fetchone()
+    if not a:
+        cur.close()
+        return jsonify({'success': False, 'message': 'Not found'}), 404
+    a['created_at'] = str(a['created_at'])
+    cur.execute("SELECT campaign_id, campaign_name, status FROM campaigns WHERE assigned_admin_email=%s ORDER BY created_at DESC", (a['email'],))
+    a['assigned_campaigns'] = cur.fetchall()
+    cur.close()
+    return jsonify({'success': True, 'admin': a})
+
+@app.route('/api/admin/assign-campaign', methods=['POST'])
+def admin_assign_campaign():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    data = request.get_json()
+    campaign_id = data.get('campaign_id')
+    admin_email = (data.get('admin_email') or '').strip().lower() or None   # None = super admin
+    cur = mysql.connection.cursor()
+    if admin_email:
+        cur.execute("SELECT id FROM admins WHERE email=%s AND role!='super'", (admin_email,))
+        if not cur.fetchone():
+            cur.close()
+            return jsonify({'success': False, 'message': 'Manager not found'}), 404
+    cur.execute("UPDATE campaigns SET assigned_admin_email=%s WHERE campaign_id=%s", (admin_email, campaign_id))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/impersonate-admin', methods=['POST'])
+def admin_impersonate_admin():
+    """Super admin 'view as' a manager."""
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT name, email, role FROM admins WHERE id=%s", (request.get_json().get('id'),))
+    row = cur.fetchone()
+    cur.close()
+    if not row or row['role'] == 'super':
+        return jsonify({'success': False, 'message': 'Not found'}), 404
+    session['acting_as_email'] = row['email']
+    session['acting_as_name'] = row.get('name') or row['email']
+    return jsonify({'success': True, 'redirect': '/admin/dashboard'})
+
+@app.route('/admin/stop-impersonate-admin')
+def admin_stop_impersonate_admin():
+    if not session.get('admin_logged_in'):
+        return redirect('/admin')
+    session.pop('acting_as_email', None)
+    session.pop('acting_as_name', None)
+    return redirect('/admin/dashboard')
+
+# ==========================================
+# ADMIN ACCOUNT SETTINGS (own password + picture)
+# ==========================================
+
+@app.route('/api/admin/me/change-password', methods=['POST'])
+def admin_change_own_password():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    new_password = request.get_json().get('new_password') or ''
+    if len(new_password) < 8:
+        return jsonify({'success': False, 'message': 'Password must be at least 8 characters'}), 400
+    email = session.get('admin_email')                 # real logged-in admin
+    role = session.get('admin_role', 'super')
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+    if cur.fetchone():
+        cur.execute("UPDATE admins SET password_hash=%s WHERE email=%s", (pbkdf2_sha256.hash(new_password), email))
+    else:
+        cur.execute("INSERT INTO admins (name, email, password_hash, role) VALUES (%s,%s,%s,%s)",
+                    (session.get('admin_name') or 'Admin', email, pbkdf2_sha256.hash(new_password), role))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/me/profile-pic', methods=['POST'])
+def admin_set_own_pic():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    image = (request.get_json().get('image') or '').strip()
+    if image and not image.startswith('data:image/'):
+        return jsonify({'success': False, 'message': 'Invalid image'}), 400
+    if len(image) > 3_000_000:
+        return jsonify({'success': False, 'message': 'Image too large'}), 400
+    email = session.get('admin_email')
+    role = session.get('admin_role', 'super')
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+    if cur.fetchone():
+        cur.execute("UPDATE admins SET profile_pic=%s WHERE email=%s", (image or None, email))
+    else:
+        cur.execute("INSERT INTO admins (name, email, role, profile_pic) VALUES (%s,%s,%s,%s)",
+                    (session.get('admin_name') or 'Admin', email, role, image or None))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
 
 # ==========================================
 # BOT API — Discord bot calls these routes
@@ -1261,6 +1561,8 @@ def admin_set_cpm():
     campaign_id = data.get('campaign_id')
     cpm_rate = data.get('cpm_rate')
     cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close(); return jsonify({'success': False, 'message': 'Not allowed'}), 403
     cur.execute("UPDATE campaigns SET cpm_rate=%s WHERE campaign_id=%s", (cpm_rate, campaign_id))
     mysql.connection.commit()
     cur.close()
