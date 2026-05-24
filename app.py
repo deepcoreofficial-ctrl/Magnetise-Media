@@ -647,9 +647,10 @@ def admin_create_campaign():
 
     password_hash = pbkdf2_sha256.hash(password)
 
-    # FIX: Campaign ID now has random suffix to prevent collision
+    # Short ID (15 chars) so it fits the existing campaigns.campaign_id column;
+    # random hex suffix prevents collisions. e.g. CX-260524F3A9C1
     import secrets
-    campaign_id = 'CX-' + datetime.now().strftime('%Y%m%d%H%M%S') + '-' + secrets.token_hex(3).upper()
+    campaign_id = 'CX-' + datetime.now().strftime('%y%m%d') + secrets.token_hex(3).upper()
 
     cur = mysql.connection.cursor()
     cur.execute("""INSERT INTO campaigns
