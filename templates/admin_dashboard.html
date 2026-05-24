@@ -638,6 +638,8 @@
         .toggle-btn.sidebar-closed{left:12px;}
         .shell-empty{text-align:center;padding:70px 24px;color:var(--muted);background:rgba(255,255,255,0.02);border:1px dashed var(--border);border-radius:16px;}
         .shell-empty h3{color:#fff;font-size:16px;margin-bottom:6px;}
+        .sync-tab.active{background:#fff;color:#000;border-color:#fff;}
+        .sync-tab .badge-count{background:rgba(0,0,0,0.12);border-color:transparent;color:inherit;}
 
         @media (max-width: 768px) {
             .stats-row { grid-template-columns: 1fr 1fr; }
@@ -735,7 +737,19 @@
     </div>
 
     <!-- SHELLS (built in later phases) -->
-    <div class="admin-page" id="page-sync"><div class="admin-page-head"><h1>Campaigns-Clips Sync</h1><p>Link Discord campaigns to website campaigns</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Pending &amp; Approved campaign syncs (with the Sync + assign flow) land here.</p></div></div>
+    <div class="admin-page" id="page-sync">
+        <div class="admin-page-head"><h1>Campaigns-Clips Sync</h1><p>Link Discord campaigns to website campaigns</p></div>
+        <div style="display:flex;gap:8px;margin-bottom:18px;">
+            <button class="btn-sm sync-tab active" id="syncTabPending" onclick="switchSyncTab('pending')">Pending <span class="badge-count" id="syncPendingBadge">0</span></button>
+            <button class="btn-sm sync-tab" id="syncTabApproved" onclick="switchSyncTab('approved')">Approved <span class="badge-count" id="syncApprovedBadge">0</span></button>
+        </div>
+        <div class="table-card"><div class="table-wrap">
+            <table>
+                <thead id="syncTableHead"></thead>
+                <tbody id="syncTableBody"><tr><td colspan="5"><div class="loading">Loading...</div></td></tr></tbody>
+            </table>
+        </div></div>
+    </div>
     <div class="admin-page" id="page-allcampaigns"><div class="admin-page-head"><h1>All Campaigns</h1><p>Every campaign with inspect (view as client / manager)</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>The full campaign list + Inspect lands here.</p></div></div>
     <div class="admin-page" id="page-mycampaigns"><div class="admin-page-head"><h1>My Campaigns</h1><p>Campaigns assigned to you</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Your assigned campaign dashboards land here.</p></div></div>
     <div class="admin-page" id="page-inspect"><div class="admin-page-head"><h1>Inspect Campaign</h1><p>Pick one of your running campaigns to view stats &amp; act</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Campaign picker + stats land here.</p></div></div>
@@ -1056,6 +1070,18 @@
     </div>
 </div>
 
+<!-- SYNC CAMPAIGN MODAL -->
+<div class="modal-overlay" id="syncModal">
+    <div class="modal" style="max-width:460px;">
+        <div class="modal-header"><div class="modal-title">Sync Campaign</div><button class="modal-close" onclick="closeModal('syncModal')">×</button></div>
+        <div class="modal-client-info" id="syncInfo"></div>
+        <div class="field"><label>Sync to website campaign</label><select id="syncCampaignSelect"></select></div>
+        <div class="field"><label>Assign to (blank = you, super admin)</label><select id="syncAssignSelect"></select></div>
+        <div id="syncMsg" class="msg-box"></div>
+        <div class="modal-actions"><button class="btn-modal-cancel" onclick="closeModal('syncModal')">Cancel</button><button class="btn-modal-primary" id="syncBtn" onclick="submitSync()">Sync &amp; Assign</button></div>
+    </div>
+</div>
+
 <!-- ASSIGN CAMPAIGN MODAL -->
 <div class="modal-overlay" id="assignModal">
     <div class="modal" style="max-width:440px;">
@@ -1156,6 +1182,7 @@ function showPage(name, el){
     if(el) el.classList.add('active');
     if(name==='roles') loadAdmins();
     if(name==='settings') fillSettings();
+    if(name==='sync') loadSync();
 }
 
 // Phase 2 will scope sections per role using the admin's role from /api/admin/check.
@@ -1294,6 +1321,75 @@ async function saveAdminPfp(dataUrl){
         if(data.success){_me.profile_pic=dataUrl;applyAdminAvatar(_me);showToast('Picture updated.');}
         else showToast(data.message||'Error','error');
     }catch{showToast('Connection error','error');}
+}
+
+// ---- Campaigns-Clips Sync ----
+let _syncData={pending:[],approved:[],available_campaigns:[],managers:[]};
+let _syncTab='pending', _syncSlug=null;
+async function loadSync(){
+    try{
+        const res=await fetch('/api/admin/sync/list');const data=await res.json();
+        if(!data.success){document.getElementById('syncTableBody').innerHTML='<tr><td colspan="4"><div class="empty-state"><p>Not allowed</p></div></td></tr>';return;}
+        _syncData=data;
+        document.getElementById('syncPendingBadge').textContent=(data.pending||[]).length;
+        document.getElementById('syncApprovedBadge').textContent=(data.approved||[]).length;
+        renderSyncTab();
+    }catch{document.getElementById('syncTableBody').innerHTML='<tr><td colspan="4"><div class="empty-state"><p>Error loading</p></div></td></tr>';}
+}
+function switchSyncTab(tab){
+    _syncTab=tab;
+    document.getElementById('syncTabPending').classList.toggle('active',tab==='pending');
+    document.getElementById('syncTabApproved').classList.toggle('active',tab==='approved');
+    renderSyncTab();
+}
+function renderSyncTab(){
+    const head=document.getElementById('syncTableHead'), body=document.getElementById('syncTableBody');
+    if(_syncTab==='pending'){
+        head.innerHTML='<tr><th>Discord Campaign</th><th>Created</th><th>Actions</th></tr>';
+        const rows=_syncData.pending||[];
+        if(!rows.length){body.innerHTML='<tr><td colspan="3"><div class="empty-state"><p>No pending campaigns. They show up here when you create one in Discord.</p></div></td></tr>';return;}
+        body.innerHTML=rows.map(r=>`<tr>
+            <td><strong>${esc(r.display_name||r.slug)}</strong><div class="td-muted" style="font-size:11px;">${esc(r.slug)}</div></td>
+            <td class="td-muted">${esc((r.created_at||'').slice(0,10))}</td>
+            <td><button class="btn-sm btn-create" onclick="openSync('${esc(r.slug)}','${esc(r.display_name||r.slug)}')">Sync</button></td>
+        </tr>`).join('');
+    }else{
+        head.innerHTML='<tr><th>Discord Campaign</th><th>Website Campaign</th><th>Assigned</th><th>Actions</th></tr>';
+        const rows=_syncData.approved||[];
+        if(!rows.length){body.innerHTML='<tr><td colspan="4"><div class="empty-state"><p>No synced campaigns yet.</p></div></td></tr>';return;}
+        body.innerHTML=rows.map(r=>`<tr>
+            <td><strong>${esc(r.display_name||r.slug)}</strong></td>
+            <td class="td-muted">${esc(r.website_campaign_name||r.website_campaign_id||'—')}</td>
+            <td class="td-muted">${esc(r.assigned_admin_email||'Super admin')}</td>
+            <td><button class="btn-sm" onclick="unlinkSync('${esc(r.slug)}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Unlink</button></td>
+        </tr>`).join('');
+    }
+}
+function openSync(slug,display){
+    _syncSlug=slug;
+    document.getElementById('syncInfo').innerHTML=`<p>Sync <strong>${esc(display)}</strong> to a website campaign</p>`;
+    const cs=document.getElementById('syncCampaignSelect');
+    cs.innerHTML=(_syncData.available_campaigns||[]).length?_syncData.available_campaigns.map(c=>`<option value="${esc(c.campaign_id)}">${esc(c.campaign_name||c.campaign_id)}</option>`).join(''):'<option value="">No active website campaigns — create one first</option>';
+    const as=document.getElementById('syncAssignSelect');
+    as.innerHTML='<option value="">— Assign to me (super admin) —</option>'+(_syncData.managers||[]).map(m=>`<option value="${esc(m.email)}">${esc(m.name||m.email)}</option>`).join('');
+    document.getElementById('syncMsg').style.display='none';
+    document.getElementById('syncModal').classList.add('open');
+}
+async function submitSync(){
+    const website_campaign_id=document.getElementById('syncCampaignSelect').value;
+    const assigned_admin_email=document.getElementById('syncAssignSelect').value;
+    const msg=document.getElementById('syncMsg');
+    if(!website_campaign_id){showModalMsg(msg,'Pick a website campaign (create one first if none).','error');return;}
+    try{
+        const res=await fetch('/api/admin/sync/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:_syncSlug,website_campaign_id,assigned_admin_email})});
+        const data=await res.json();
+        if(data.success){closeModal('syncModal');showToast('Campaign synced.');loadSync();}
+        else showModalMsg(msg,data.message||'Error','error');
+    }catch{showModalMsg(msg,'Connection error','error');}
+}
+async function unlinkSync(slug){
+    if(!confirm('Unlink this campaign? It returns to Pending.'))return;
+    try{const res=await fetch('/api/admin/sync/unlink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug})});const data=await res.json();if(data.success){showToast('Unlinked.');loadSync();}else showToast('Error','error');}catch{showToast('Connection error','error');}
 }
 
 async function loadData() { loadPending(); loadAllClients(); loadStats(); }

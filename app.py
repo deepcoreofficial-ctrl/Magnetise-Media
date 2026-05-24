@@ -169,6 +169,20 @@ def create_tables():
                 )
             """)
 
+            # Discord campaigns pushed by the bot. 'pending' until the super admin
+            # syncs it to a website campaign, then 'approved' with the mapping.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS discord_campaigns (
+                    slug VARCHAR(255) PRIMARY KEY,
+                    display_name VARCHAR(255),
+                    created_at DATETIME,
+                    sync_status VARCHAR(20) DEFAULT 'pending',
+                    website_campaign_id VARCHAR(40),
+                    synced_at DATETIME,
+                    received_at DATETIME DEFAULT NOW()
+                )
+            """)
+
             # Widen view columns INT -> BIGINT so large counts don't overflow (error 1264).
             # campaigns/users pre-exist so these are ALTERs; each is guarded so one failure
             # (e.g. table missing on a fresh DB) won't abort the rest.
@@ -197,6 +211,9 @@ def create_tables():
                 "ALTER TABLE clips ADD COLUMN reject_reason TEXT",
                 # Which admin/manager a campaign is assigned to (NULL = super admin)
                 "ALTER TABLE campaigns ADD COLUMN assigned_admin_email VARCHAR(255)",
+                # Who reviewed each clip (Discord admin name), shown to the client
+                "ALTER TABLE top_clips ADD COLUMN reviewed_by VARCHAR(255)",
+                "ALTER TABLE clips ADD COLUMN reviewed_by VARCHAR(255)",
                 # Normalize any legacy status value left over from the old schema
                 "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
@@ -1360,6 +1377,85 @@ def admin_stop_impersonate_admin():
     return redirect('/admin/dashboard')
 
 # ==========================================
+# CAMPAIGNS-CLIPS SYNC (super admin only)
+# ==========================================
+
+@app.route('/api/admin/sync/list')
+def admin_sync_list():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        SELECT d.slug, d.display_name, d.created_at, d.sync_status, d.website_campaign_id, d.synced_at,
+               c.campaign_name AS website_campaign_name, c.assigned_admin_email
+        FROM discord_campaigns d
+        LEFT JOIN campaigns c ON d.website_campaign_id = c.campaign_id
+        ORDER BY d.received_at DESC
+    """)
+    rows = cur.fetchall()
+    for r in rows:
+        r['created_at'] = str(r['created_at']) if r.get('created_at') else None
+        r['synced_at'] = str(r['synced_at']) if r.get('synced_at') else None
+    # website campaigns available to map (active + not already mapped)
+    cur.execute("""
+        SELECT campaign_id, campaign_name FROM campaigns
+        WHERE status='ACTIVE' AND campaign_id NOT IN (
+            SELECT website_campaign_id FROM discord_campaigns
+            WHERE website_campaign_id IS NOT NULL AND sync_status='approved'
+        )
+        ORDER BY created_at DESC
+    """)
+    available = cur.fetchall()
+    cur.execute("SELECT name, email FROM admins WHERE role!='super' ORDER BY name")
+    managers = cur.fetchall()
+    cur.close()
+    return jsonify({
+        'success': True,
+        'pending':  [r for r in rows if r['sync_status'] == 'pending'],
+        'approved': [r for r in rows if r['sync_status'] == 'approved'],
+        'available_campaigns': available,
+        'managers': managers,
+    })
+
+@app.route('/api/admin/sync/approve', methods=['POST'])
+def admin_sync_approve():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    data = request.get_json()
+    slug = (data.get('slug') or '').strip()
+    website_campaign_id = (data.get('website_campaign_id') or '').strip()
+    assigned = (data.get('assigned_admin_email') or '').strip().lower() or None   # None = super admin
+    if not slug or not website_campaign_id:
+        return jsonify({'success': False, 'message': 'slug and website campaign required'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM campaigns WHERE campaign_id=%s", (website_campaign_id,))
+    if not cur.fetchone():
+        cur.close()
+        return jsonify({'success': False, 'message': 'Website campaign not found'}), 404
+    if assigned:
+        cur.execute("SELECT id FROM admins WHERE email=%s AND role!='super'", (assigned,))
+        if not cur.fetchone():
+            cur.close()
+            return jsonify({'success': False, 'message': 'Manager not found'}), 404
+    cur.execute("UPDATE discord_campaigns SET sync_status='approved', website_campaign_id=%s, synced_at=NOW() WHERE slug=%s",
+                (website_campaign_id, slug))
+    cur.execute("UPDATE campaigns SET assigned_admin_email=%s WHERE campaign_id=%s", (assigned, website_campaign_id))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/sync/unlink', methods=['POST'])
+def admin_sync_unlink():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    slug = (request.get_json().get('slug') or '').strip()
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE discord_campaigns SET sync_status='pending', website_campaign_id=NULL, synced_at=NULL WHERE slug=%s", (slug,))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+# ==========================================
 # ADMIN ACCOUNT SETTINGS (own password + picture)
 # ==========================================
 
@@ -1425,6 +1521,7 @@ def bot_submit_clip():
 
     data = request.get_json()
     campaign_id  = data.get('campaign_id', '').strip()
+    campaign_slug= (data.get('campaign_slug') or '').strip()   # Discord campaign → resolved on the site
     clipper_name = data.get('clipper_name', '').strip()
     platform     = data.get('platform', '').strip()      # TikTok / YouTube / Reels / Shorts
     views        = int(data.get('views', 0))
@@ -1433,8 +1530,8 @@ def bot_submit_clip():
     if status not in ('pending', 'approved', 'rejected'):
         status = 'pending'
 
-    if not campaign_id or not clipper_name or not platform:
-        return jsonify({'success': False, 'message': 'campaign_id, clipper_name, platform required'}), 400
+    if not (campaign_id or campaign_slug) or not clipper_name or not platform:
+        return jsonify({'success': False, 'message': 'campaign (id or slug), clipper_name, platform required'}), 400
 
     # Extract YouTube video ID from URL
     yt_video_id = None
@@ -1444,6 +1541,15 @@ def bot_submit_clip():
             yt_video_id = match.group(1)
 
     cur = mysql.connection.cursor()
+
+    # Route Discord submissions by slug -> mapped website campaign
+    if campaign_slug:
+        cur.execute("SELECT website_campaign_id FROM discord_campaigns WHERE slug=%s AND sync_status='approved'", (campaign_slug,))
+        m = cur.fetchone()
+        if not m or not m.get('website_campaign_id'):
+            cur.close()
+            return jsonify({'success': False, 'message': 'Campaign not synced to a website campaign yet'}), 409
+        campaign_id = m['website_campaign_id']
 
     # Check campaign exists
     cur.execute("SELECT campaign_id FROM campaigns WHERE campaign_id=%s", (campaign_id,))
@@ -1477,10 +1583,12 @@ def bot_set_clip_status():
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
 
     data = request.get_json()
-    campaign_id = (data.get('campaign_id') or '').strip()
-    url         = (data.get('url') or '').strip()
-    status      = (data.get('status') or '').strip().lower()
-    reason      = data.get('reject_reason')
+    campaign_id   = (data.get('campaign_id') or '').strip()
+    campaign_slug = (data.get('campaign_slug') or '').strip()
+    url           = (data.get('url') or '').strip()
+    status        = (data.get('status') or '').strip().lower()
+    reason        = data.get('reject_reason')
+    reviewed_by   = data.get('reviewed_by')
 
     if status not in ('pending', 'approved', 'rejected'):
         return jsonify({'success': False, 'message': 'status must be pending/approved/rejected'}), 400
@@ -1488,14 +1596,19 @@ def bot_set_clip_status():
         return jsonify({'success': False, 'message': 'url required'}), 400
 
     cur = mysql.connection.cursor()
+    if campaign_slug and not campaign_id:
+        cur.execute("SELECT website_campaign_id FROM discord_campaigns WHERE slug=%s", (campaign_slug,))
+        m = cur.fetchone()
+        campaign_id = (m['website_campaign_id'] if m and m.get('website_campaign_id') else '')
+
     if campaign_id:
-        cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s WHERE campaign_id=%s AND url=%s",
-                    (status, reason, campaign_id, url))
-        cur.execute("UPDATE clips SET status=%s, reject_reason=%s WHERE campaign_id=%s AND url=%s",
-                    (status, reason, campaign_id, url))
+        cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s, reviewed_by=%s WHERE campaign_id=%s AND url=%s",
+                    (status, reason, reviewed_by, campaign_id, url))
+        cur.execute("UPDATE clips SET status=%s, reject_reason=%s, reviewed_by=%s WHERE campaign_id=%s AND url=%s",
+                    (status, reason, reviewed_by, campaign_id, url))
     else:
-        cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s WHERE url=%s", (status, reason, url))
-        cur.execute("UPDATE clips SET status=%s, reject_reason=%s WHERE url=%s", (status, reason, url))
+        cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s, reviewed_by=%s WHERE url=%s", (status, reason, reviewed_by, url))
+        cur.execute("UPDATE clips SET status=%s, reject_reason=%s, reviewed_by=%s WHERE url=%s", (status, reason, reviewed_by, url))
 
     # Re-sync every campaign this URL belongs to
     cur.execute("SELECT DISTINCT campaign_id FROM top_clips WHERE url=%s", (url,))
@@ -1509,6 +1622,49 @@ def bot_set_clip_status():
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True, 'total_views': total})
+
+
+@app.route('/api/bot/campaign-created', methods=['POST'])
+def bot_campaign_created():
+    """Discord bot pushes a newly-created campaign. Lands in the Pending sync list."""
+    if not bot_auth():
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    data = request.get_json()
+    slug = (data.get('slug') or data.get('campaign_slug') or '').strip()
+    if not slug:
+        return jsonify({'success': False, 'message': 'slug required'}), 400
+    display = data.get('display_name') or slug
+    created = data.get('created_at')   # optional 'YYYY-MM-DD HH:MM:SS'
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        INSERT INTO discord_campaigns (slug, display_name, created_at)
+        VALUES (%s,%s,%s)
+        ON DUPLICATE KEY UPDATE display_name=VALUES(display_name)
+    """, (slug, display, created))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/bot/campaign-finished', methods=['POST'])
+def bot_campaign_finished():
+    """Discord bot pushes a campaign deletion. Closes the mapped website campaign."""
+    if not bot_auth():
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    slug = (request.get_json().get('slug') or request.get_json().get('campaign_slug') or '').strip()
+    if not slug:
+        return jsonify({'success': False, 'message': 'slug required'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT website_campaign_id FROM discord_campaigns WHERE slug=%s", (slug,))
+    row = cur.fetchone()
+    if row and row.get('website_campaign_id'):
+        cid = row['website_campaign_id']
+        cur.execute("UPDATE campaigns SET status='COMPLETED' WHERE campaign_id=%s", (cid,))
+        cur.execute("UPDATE users SET account_status='COMPLETED' WHERE campaign_id=%s", (cid,))
+    cur.execute("UPDATE discord_campaigns SET sync_status='closed' WHERE slug=%s", (slug,))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
 
 
 @app.route('/api/bot/update-views', methods=['POST'])
@@ -1722,7 +1878,7 @@ def dashboard_all_clips():
         return jsonify({'success': True, 'clips': [], 'summary': empty})
     cid = user['campaign_id']
     cur.execute("""
-        SELECT id, clipper_name, platform, views, url, status, added_at
+        SELECT id, clipper_name, platform, views, url, status, added_at, reviewed_by, reject_reason
         FROM top_clips WHERE campaign_id=%s ORDER BY added_at DESC
     """, (cid,))
     clips = cur.fetchall()
@@ -1737,6 +1893,13 @@ def dashboard_all_clips():
         FROM top_clips WHERE campaign_id=%s
     """, (cid,))
     s = cur.fetchone() or {}
+    cur.execute("SELECT assigned_admin_email FROM campaigns WHERE campaign_id=%s", (cid,))
+    crow = cur.fetchone()
+    managed_by = 'Magnetise Media'
+    if crow and crow.get('assigned_admin_email'):
+        cur.execute("SELECT name FROM admins WHERE email=%s", (crow['assigned_admin_email'],))
+        mrow = cur.fetchone()
+        managed_by = (mrow.get('name') if mrow else None) or crow['assigned_admin_email']
     cur.close()
     summary = {
         'total': int(s.get('total') or 0),
@@ -1744,6 +1907,7 @@ def dashboard_all_clips():
         'pending': int(s.get('pending') or 0),
         'rejected': int(s.get('rejected') or 0),
         'approved_views': int(s.get('approved_views') or 0),
+        'managed_by': managed_by,
     }
     return jsonify({'success': True, 'clips': clips, 'summary': summary})
 

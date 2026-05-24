@@ -961,6 +961,7 @@ async function loadClipsPage(){
             <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value">${Number(s.pending).toLocaleString()}</div></div>
             <div class="stat-card"><div class="stat-label">Approved Views</div><div class="stat-value">${Number(s.approved_views).toLocaleString()}</div></div>
         </div>`;
+        if(s.managed_by){html+=`<div style="text-align:center;color:#555;font-size:12px;margin:-6px 0 16px;">Managed by ${esc(s.managed_by)}</div>`;}
         if(lb.length){
             const rc=i=>i===0?'gold':i===1?'silver':i===2?'bronze':'';
             html+=`<div class="glass" style="margin-bottom:20px;"><div class="section-title">Clipper Leaderboard</div>`;
@@ -982,6 +983,7 @@ async function loadClipsPage(){
                             <span class="clip-status ${st}">${esc(st)}</span>
                         </div>
                         <div style="font-size:12px;color:#555;margin-top:6px;">${esc(c.clipper_name||'—')} · ${Number(c.views||0).toLocaleString()} views · ${esc((c.added_at||'').slice(0,10))}</div>
+                        ${c.reviewed_by?`<div style="font-size:11px;color:#666;margin-top:3px;">${st==='rejected'?'Rejected':'Approved'} by ${esc(c.reviewed_by)}${(st==='rejected'&&c.reject_reason)?(' — '+esc(c.reject_reason)):''}</div>`:''}
                     </div>
                     ${safeUrl?`<a class="clip-link" href="${safeUrl}" target="_blank" rel="noopener">View <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`:''}
                 </div>`;
