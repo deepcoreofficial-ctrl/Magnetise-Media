@@ -158,11 +158,23 @@ def create_tables():
             # campaigns/users pre-exist so these are ALTERs; each is guarded so one failure
             # (e.g. table missing on a fresh DB) won't abort the rest.
             for _alter in (
+                # Views: INT -> BIGINT so large counts don't overflow (error 1264)
                 "ALTER TABLE campaigns MODIFY current_views BIGINT",
                 "ALTER TABLE campaigns MODIFY target_views BIGINT",
                 "ALTER TABLE views_history MODIFY views BIGINT NOT NULL",
                 "ALTER TABLE top_clips MODIFY views BIGINT DEFAULT 0",
                 "ALTER TABLE clips MODIFY views BIGINT DEFAULT 0",
+                # Status columns: the live DB used different ENUM values than the code
+                # ('ACTIVE_CAMPAIGN' vs 'ACTIVE'), causing "Data truncated" (error 1265).
+                # Convert to plain text so every value the code uses is accepted.
+                "ALTER TABLE users MODIFY account_status VARCHAR(20) DEFAULT 'PENDING'",
+                "ALTER TABLE campaigns MODIFY status VARCHAR(20) DEFAULT 'ACTIVE'",
+                # Password hashes are ~80-120 chars; make sure they're never truncated
+                # (a truncated hash = client can never log in).
+                "ALTER TABLE users MODIFY password_hash VARCHAR(255)",
+                "ALTER TABLE users MODIFY rejection_reason TEXT",
+                # Normalize any legacy status value left over from the old schema
+                "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
                 try:
                     cur.execute(_alter)
