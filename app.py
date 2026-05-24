@@ -274,6 +274,13 @@ def create_tables():
                 # Who reviewed each clip (Discord admin name), shown to the client
                 "ALTER TABLE top_clips ADD COLUMN reviewed_by VARCHAR(255)",
                 "ALTER TABLE clips ADD COLUMN reviewed_by VARCHAR(255)",
+                # Ensure the admins table has every expected column even if it pre-existed
+                # (CREATE IF NOT EXISTS won't alter an existing table)
+                "ALTER TABLE admins ADD COLUMN name VARCHAR(255)",
+                "ALTER TABLE admins ADD COLUMN password_hash VARCHAR(255)",
+                "ALTER TABLE admins ADD COLUMN role VARCHAR(20) DEFAULT 'manager'",
+                "ALTER TABLE admins ADD COLUMN profile_pic MEDIUMTEXT",
+                "ALTER TABLE admins ADD COLUMN created_at DATETIME DEFAULT NOW()",
                 # Normalize any legacy status value left over from the old schema
                 "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
@@ -711,8 +718,12 @@ def admin_login():
     # Super admin — code-fixed email. Env password always works (recovery); a changed
     # password saved in the admins row also works.
     if email_l == ADMIN_EMAIL.lower() and ADMIN_EMAIL:
-        cur.execute("SELECT name, password_hash FROM admins WHERE email=%s", (ADMIN_EMAIL,))
-        srow = cur.fetchone()
+        srow = None
+        try:
+            cur.execute("SELECT name, password_hash FROM admins WHERE email=%s", (ADMIN_EMAIL,))
+            srow = cur.fetchone()
+        except Exception:
+            srow = None   # admins table not migrated yet — env password still works
         cur.close()
         ok = (password == ADMIN_PASSWORD)
         if not ok and srow and srow.get('password_hash'):
@@ -729,8 +740,12 @@ def admin_login():
         return jsonify({'success': False, 'message': 'Invalid credentials'})
 
     # Campaign manager — DB account
-    cur.execute("SELECT name, password_hash, role FROM admins WHERE email=%s", (email_l,))
-    row = cur.fetchone()
+    row = None
+    try:
+        cur.execute("SELECT name, password_hash, role FROM admins WHERE email=%s", (email_l,))
+        row = cur.fetchone()
+    except Exception:
+        row = None
     cur.close()
     if row and row.get('password_hash') and row.get('role') != 'super':
         try: ok = pbkdf2_sha256.verify(password, row['password_hash'])
