@@ -753,8 +753,20 @@
     <div class="admin-page" id="page-allcampaigns"><div class="admin-page-head"><h1>All Campaigns</h1><p>Every campaign with inspect (view as client / manager)</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>The full campaign list + Inspect lands here.</p></div></div>
     <div class="admin-page" id="page-mycampaigns"><div class="admin-page-head"><h1>My Campaigns</h1><p>Campaigns assigned to you</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Your assigned campaign dashboards land here.</p></div></div>
     <div class="admin-page" id="page-inspect"><div class="admin-page-head"><h1>Inspect Campaign</h1><p>Pick one of your running campaigns to view stats &amp; act</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Campaign picker + stats land here.</p></div></div>
-    <div class="admin-page" id="page-appeals"><div class="admin-page-head"><h1>Appeals</h1><p>Client clip appeals awaiting action</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Appeals (with 48h countdown) land here.</p></div></div>
-    <div class="admin-page" id="page-permits"><div class="admin-page-head"><h1>Permits</h1><p>Campaign-manager requests for heavy actions</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Permit requests + approve/deny land here.</p></div></div>
+    <div class="admin-page" id="page-appeals">
+        <div class="admin-page-head"><h1>Appeals</h1><p>Client clip disputes awaiting your decision (48h window)</p></div>
+        <div class="table-card"><div class="table-wrap"><table>
+            <thead><tr><th>Campaign</th><th>Clip</th><th>Client wants</th><th>Reason</th><th>Time left</th><th>Actions</th></tr></thead>
+            <tbody id="appealsTableBody"><tr><td colspan="6"><div class="loading">Loading...</div></td></tr></tbody>
+        </table></div></div>
+    </div>
+    <div class="admin-page" id="page-permits">
+        <div class="admin-page-head"><h1>Permits</h1><p>Campaign-manager requests for heavy actions</p></div>
+        <div class="table-card"><div class="table-wrap"><table>
+            <thead><tr><th>Manager</th><th>Campaign</th><th>Action</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="permitsTableBody"><tr><td colspan="5"><div class="loading">Loading...</div></td></tr></tbody>
+        </table></div></div>
+    </div>
     <div class="admin-page" id="page-roles">
         <div class="admin-page-head"><h1>Roles</h1><p>Create &amp; manage campaign managers, assign campaigns</p></div>
         <div class="section">
@@ -1119,6 +1131,21 @@
     </div>
 </div>
 
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="reportModal">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header"><div class="modal-title">Campaign Report</div><button class="modal-close" onclick="closeModal('reportModal')">×</button></div>
+        <div class="modal-client-info" id="reportInfo"></div>
+        <p style="color:var(--muted);font-size:13px;margin:14px 0;">Make the report available to the client — auto-generate it, or upload your own PDF.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+            <button class="btn-modal-primary" id="reportAutoBtn" onclick="reportAuto()">Auto-generate from campaign data</button>
+            <button class="btn-modal-cancel" onclick="document.getElementById('reportFile').click()">Upload a PDF from my computer</button>
+            <input type="file" id="reportFile" accept="application/pdf" style="display:none;" onchange="reportUpload(event)">
+        </div>
+        <div id="reportMsg" class="msg-box"></div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1183,6 +1210,8 @@ function showPage(name, el){
     if(name==='roles') loadAdmins();
     if(name==='settings') fillSettings();
     if(name==='sync') loadSync();
+    if(name==='appeals') loadAppeals();
+    if(name==='permits') loadPermits();
 }
 
 // Phase 2 will scope sections per role using the admin's role from /api/admin/check.
@@ -1392,6 +1421,105 @@ async function unlinkSync(slug){
     try{const res=await fetch('/api/admin/sync/unlink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug})});const data=await res.json();if(data.success){showToast('Unlinked.');loadSync();}else showToast('Error','error');}catch{showToast('Connection error','error');}
 }
 
+// ---- Appeals ----
+function timeLeft(iso){
+    if(!iso) return '—';
+    const ms=new Date(iso.replace(' ','T')).getTime()-Date.now();
+    if(isNaN(ms)) return '—';
+    if(ms<=0) return 'expired';
+    const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000);
+    return h+'h '+m+'m';
+}
+async function loadAppeals(){
+    const tb=document.getElementById('appealsTableBody');
+    try{
+        const res=await fetch('/api/admin/appeals');const data=await res.json();
+        const rows=data.appeals||[];
+        if(!rows.length){tb.innerHTML='<tr><td colspan="6"><div class="empty-state"><p>No appeals.</p></div></td></tr>';return;}
+        tb.innerHTML=rows.map(r=>{
+            const open=r.status==='open';
+            const stColor=r.status==='resolved'?'#00cc6a':r.status==='expired'?'#888':'#ffb300';
+            const acts = open
+                ? `<button class="btn-sm" onclick="resolveAppeal(${r.id},'approved')">Approve clip</button>
+                   <button class="btn-sm" onclick="resolveAppeal(${r.id},'rejected')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Reject clip</button>
+                   <button class="btn-sm" onclick="extendAppeal(${r.id})">+48h</button>`
+                : `<span style="color:${stColor};font-weight:700;text-transform:capitalize;">${esc(r.status)}${r.decision?(' · '+esc(r.decision)):''}</span>`;
+            return `<tr>
+                <td>${esc(r.campaign_name||r.campaign_id||'—')}</td>
+                <td><a href="${(/^https?:\/\//i.test(r.clip_url||''))?esc(r.clip_url).replace(/"/g,'&quot;'):'#'}" target="_blank" style="color:#8ab4ff;">${esc((r.clip_url||'').slice(0,32))}…</a><div class="td-muted" style="font-size:11px;">${esc(r.clipper_name||'')} · was ${esc(r.current_status||'')}</div></td>
+                <td><span class="clip-status ${esc(r.desired_status||'')}">${esc(r.desired_status||'')}</span></td>
+                <td class="td-muted" style="max-width:220px;">${esc(r.reason||'—')}</td>
+                <td class="td-muted">${open?timeLeft(r.expires_at):'—'}</td>
+                <td><div class="action-btns">${acts}</div></td>
+            </tr>`;
+        }).join('');
+    }catch{tb.innerHTML='<tr><td colspan="6"><div class="empty-state"><p>Error loading</p></div></td></tr>';}
+}
+async function resolveAppeal(id,decision){
+    let reason='';
+    if(decision==='rejected'){ reason=prompt('Rejection reason (shown to client):')||''; }
+    try{
+        const res=await fetch('/api/admin/appeals/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,decision,reason})});
+        const data=await res.json();
+        if(data.success){showToast('Appeal resolved.');loadAppeals();}else showToast(data.message||'Error','error');
+    }catch{showToast('Connection error','error');}
+}
+async function extendAppeal(id){
+    try{const res=await fetch('/api/admin/appeals/extend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,hours:48})});const data=await res.json();if(data.success){showToast('Extended 48h.');loadAppeals();}else showToast('Error','error');}catch{showToast('Connection error','error');}
+}
+
+// ---- Permits ----
+async function loadPermits(){
+    const tb=document.getElementById('permitsTableBody');
+    try{
+        const res=await fetch('/api/admin/permits');const data=await res.json();
+        const rows=data.permits||[];
+        if(!rows.length){tb.innerHTML='<tr><td colspan="5"><div class="empty-state"><p>No permit requests.</p></div></td></tr>';return;}
+        tb.innerHTML=rows.map(r=>{
+            const pending=r.status==='pending';
+            const acts=pending
+                ? `<button class="btn-sm" onclick="resolvePermit(${r.id},true)">Approve</button>
+                   <button class="btn-sm" onclick="resolvePermit(${r.id},false)" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Deny</button>`
+                : `<span style="text-transform:capitalize;color:${r.status==='approved'?'#00cc6a':'#ff8080'};font-weight:700;">${esc(r.status)}</span>`;
+            return `<tr>
+                <td class="td-email">${esc(r.manager_email||'—')}</td>
+                <td>${esc(r.campaign_name||r.campaign_id||'—')}</td>
+                <td>${esc((r.action||'').replace(/_/g,' '))}${r.note?('<div class="td-muted" style="font-size:11px;">'+esc(r.note)+'</div>'):''}</td>
+                <td class="td-muted" style="text-transform:capitalize;">${esc(r.status)}</td>
+                <td><div class="action-btns">${acts}</div></td>
+            </tr>`;
+        }).join('');
+    }catch{tb.innerHTML='<tr><td colspan="5"><div class="empty-state"><p>Error loading</p></div></td></tr>';}
+}
+async function resolvePermit(id,approve){
+    try{const res=await fetch('/api/admin/permits/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,approve})});const data=await res.json();if(data.success){showToast(approve?'Permit approved.':'Permit denied.');loadPermits();loadData();}else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
+}
+
+// ---- Report ----
+let _reportCid=null;
+function aReport(uid){ const c=C(uid); if(!c.campaign_id){showToast('No campaign','error');return;} _reportCid=c.campaign_id; document.getElementById('reportInfo').innerHTML=`<p>Report for <strong>${esc(c.campaign_name||c.campaign_id)}</strong></p>`; document.getElementById('reportMsg').style.display='none'; document.getElementById('reportModal').classList.add('open'); }
+async function reportAuto(){
+    try{const res=await fetch('/api/admin/report/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign_id:_reportCid,mode:'auto'})});const data=await res.json();
+        if(data.success){closeModal('reportModal');showToast('Report enabled (auto-generated).');}else showModalMsg(document.getElementById('reportMsg'),data.message||'Error','error');
+    }catch{showModalMsg(document.getElementById('reportMsg'),'Connection error','error');}
+}
+function reportUpload(e){
+    const file=e.target.files&&e.target.files[0]; if(!file)return;
+    if(file.type!=='application/pdf'){showModalMsg(document.getElementById('reportMsg'),'Choose a PDF','error');return;}
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+        try{const res=await fetch('/api/admin/report/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign_id:_reportCid,mode:'uploaded',pdf_data:ev.target.result})});const data=await res.json();
+            if(data.success){closeModal('reportModal');showToast('Report uploaded.');}else showModalMsg(document.getElementById('reportMsg'),data.message||'Error','error');
+        }catch{showModalMsg(document.getElementById('reportMsg'),'Connection error','error');}
+    };
+    reader.readAsDataURL(file); e.target.value='';
+}
+async function aRequestEnd(uid){
+    const c=C(uid); if(!c.campaign_id)return;
+    if(!confirm('Request the super admin to end this campaign?'))return;
+    try{const res=await fetch('/api/admin/permits/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign_id:c.campaign_id,action:'complete_campaign',note:'Requested from client list'})});const data=await res.json();if(data.success)showToast('Permit requested.');else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
+}
+
 async function loadData() { loadPending(); loadAllClients(); loadStats(); }
 
 async function loadStats() {
@@ -1462,11 +1590,12 @@ async function loadAllClients() {
                     <button class="btn-sm btn-view" onclick="aSetCpm('${uid}')">Set Pay Rate</button>
                     <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>
                     ${!c.email_sent ? `<button class="btn-sm btn-send" onclick="aSendEmail('${uid}')">Send Details</button>` : ''}
-                    <button class="btn-sm" onclick="aMarkComplete('${uid}')">Mark Complete</button>`;
+                    ${_me.role==='super' ? `<button class="btn-sm" onclick="aMarkComplete('${uid}')">Mark Complete</button>` : `<button class="btn-sm" onclick="aRequestEnd('${uid}')">Request End</button>`}`;
             } else if (st === 'COMPLETED') {
                 actions = `
                     <button class="btn-sm" onclick="aEditCampaign('${uid}')">Edit Campaign</button>
-                    <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>`;
+                    <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>
+                    <button class="btn-sm btn-view" onclick="aReport('${uid}')">Report</button>`;
             }
             const shared = `
                 ${hasCampaign ? `<a class="btn-sm" href="/api/admin/invoice/${esc(c.campaign_id)}" target="_blank">Invoice</a>` : ''}

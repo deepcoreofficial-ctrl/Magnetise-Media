@@ -474,6 +474,7 @@
                 </div>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
                     <button class="btn-primary" onclick="openModal('pwModal')">Change Password</button>
+                    <a id="accReportBtn" class="btn-primary" href="/api/dashboard/report" target="_blank" style="display:none;text-decoration:none;">Download Report</a>
                 </div>
             </div>
             <div class="glass">
@@ -547,8 +548,28 @@
     </div>
 </div>
 
+<div class="modal-bg" id="appealModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div class="modal-title">Appeal Clip Status</div>
+            <button class="modal-close" onclick="closeModal('appealModal')">×</button>
+        </div>
+        <div id="appealCurrent" style="font-size:13px;color:#aaa;margin-bottom:14px;"></div>
+        <div class="form-group">
+            <label class="form-label">What should it be?</label>
+            <div style="display:flex;gap:10px;">
+                <button type="button" class="tf-btn" id="appealWantApprove" onclick="setAppealWant('approved')">Should be Approved</button>
+                <button type="button" class="tf-btn" id="appealWantReject" onclick="setAppealWant('rejected')">Should be Rejected</button>
+            </div>
+        </div>
+        <div class="form-group"><label class="form-label">Why? (sent to the team)</label><textarea class="form-input" id="appealReason" rows="3" placeholder="Explain your reasoning"></textarea></div>
+        <div id="appealMsg" class="form-msg"></div>
+        <button class="btn-primary" style="width:100%;" onclick="submitAppeal()">Submit Appeal</button>
+    </div>
+</div>
+
 <script>
-let _dashData=null,_viewsChart=null,_aCharts=[],_sidebarOpen=true;
+let _dashData=null,_viewsChart=null,_aCharts=[],_sidebarOpen=true,_clientClips=[],_appealUrl=null,_appealWant=null;
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function daysElapsed(ds){if(!ds)return'—';const d=Math.floor((Date.now()-new Date(ds).getTime())/86400000);return d>=0?d+' day'+(d!==1?'s':''):'—';}
@@ -750,7 +771,7 @@ function renderDashboard(d){
                 <div class="info-row"><span class="info-key">Campaign ID</span><span class="info-val">${esc(d.campaign_id||'—')}</span></div>
                 <div class="info-row"><span class="info-key">Status</span><span class="info-val">${cs.charAt(0)+cs.slice(1).toLowerCase()}</span></div>
                 <div class="info-row"><span class="info-key">Start Date</span><span class="info-val">${esc(d.start_date||'—')}</span></div>
-                <div class="info-row"><span class="info-key">Expected End</span><span class="info-val">${esc(d.expected_end_date||'—')}</span></div>
+                <div class="info-row"><span class="info-key">Expected End</span><span class="info-val">${esc(d.expected_end_date||'---')}</span></div>
                 <div class="info-row"><span class="info-key">Days Elapsed</span><span class="info-val">${elapsed}</span></div>
             </div>
             <div class="glass">
@@ -815,7 +836,7 @@ async function openCampaignAnalyticsModal(){
         <div class="info-row"><span class="info-key">View Guarantee (80%)</span><span class="info-val" style="color:#00cc6a;">$${Math.round(budget*0.80).toLocaleString()}</span></div>
         <div class="info-row"><span class="info-key">Status</span><span class="info-val">${cs}</span></div>
         <div class="info-row"><span class="info-key">Start Date</span><span class="info-val">${esc(d.start_date||'—')}</span></div>
-        <div class="info-row" style="border-bottom:none;"><span class="info-key">End Date</span><span class="info-val">${esc(d.expected_end_date||'—')}</span></div>
+        <div class="info-row" style="border-bottom:none;"><span class="info-key">End Date</span><span class="info-val">${esc(d.expected_end_date||'---')}</span></div>
     `;
     try{
         const res=await fetch('/api/dashboard/views-history');
@@ -971,8 +992,9 @@ async function loadClipsPage(){
         html+=`<div class="glass"><div class="section-title">All Submitted Clips</div>`;
         if(clips.length===0){html+=`<div class="no-clips">No clips submitted yet.<br>Clippers submit through Discord and they'll appear here with their status.</div>`;}
         else{
+            _clientClips=clips;
             html+=`<div style="display:flex;flex-direction:column;gap:10px;">`;
-            clips.forEach(c=>{
+            clips.forEach((c,idx)=>{
                 const pc=platformClass(c.platform);
                 const st=(c.status||'pending').toLowerCase();
                 const safeUrl=(c.url&&/^https?:\/\//i.test(c.url))?esc(c.url).replace(/"/g,'&quot;'):null;
@@ -985,7 +1007,10 @@ async function loadClipsPage(){
                         <div style="font-size:12px;color:#555;margin-top:6px;">${esc(c.clipper_name||'—')} · ${Number(c.views||0).toLocaleString()} views · ${esc((c.added_at||'').slice(0,10))}</div>
                         ${c.reviewed_by?`<div style="font-size:11px;color:#666;margin-top:3px;">${st==='rejected'?'Rejected':'Approved'} by ${esc(c.reviewed_by)}${(st==='rejected'&&c.reject_reason)?(' — '+esc(c.reject_reason)):''}</div>`:''}
                     </div>
-                    ${safeUrl?`<a class="clip-link" href="${safeUrl}" target="_blank" rel="noopener">View <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`:''}
+                    <div style="display:flex;gap:6px;flex-shrink:0;">
+                        ${safeUrl?`<a class="clip-link" href="${safeUrl}" target="_blank" rel="noopener">View</a>`:''}
+                        <button class="clip-link" style="cursor:pointer;background:none;font-family:inherit;" onclick="openAppeal(${idx})">Appeal</button>
+                    </div>
                 </div>`;
             });
             html+=`</div>`;
@@ -993,6 +1018,33 @@ async function loadClipsPage(){
         html+=`</div>`;
         el.innerHTML=html;
     }catch(e){el.innerHTML='<div class="no-clips">Could not load clips.</div>';}
+}
+
+function setAppealWant(w){
+    _appealWant=w;
+    document.getElementById('appealWantApprove').classList.toggle('active',w==='approved');
+    document.getElementById('appealWantReject').classList.toggle('active',w==='rejected');
+}
+function openAppeal(idx){
+    const c=_clientClips[idx]; if(!c)return;
+    _appealUrl=c.url; _appealWant=null;
+    document.getElementById('appealCurrent').innerHTML=`This clip is currently <b style="color:#fff;text-transform:capitalize;">${esc(c.status||'pending')}</b>. Tell us what it should be and why.`;
+    document.getElementById('appealWantApprove').classList.remove('active');
+    document.getElementById('appealWantReject').classList.remove('active');
+    document.getElementById('appealReason').value='';
+    const m=document.getElementById('appealMsg');m.className='form-msg';m.style.display='none';
+    openModal('appealModal');
+}
+async function submitAppeal(){
+    const m=document.getElementById('appealMsg');
+    if(!_appealWant){m.textContent='Pick approve or reject first.';m.className='form-msg error';return;}
+    const reason=document.getElementById('appealReason').value.trim();
+    try{
+        const res=await fetch('/api/dashboard/appeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clip_url:_appealUrl,desired_status:_appealWant,reason})});
+        const data=await res.json();
+        if(data.success){m.textContent='Appeal submitted — the team will review it.';m.className='form-msg success';setTimeout(()=>closeModal('appealModal'),1200);}
+        else{m.textContent=data.message||'Error.';m.className='form-msg error';}
+    }catch(e){m.textContent='Connection error.';m.className='form-msg error';}
 }
 
 async function renderAnalytics(d){
@@ -1125,7 +1177,7 @@ async function renderAnalytics(d){
 
                     <div class="info-row" style="border-bottom:none;">
                         <span class="info-key">Expected End</span>
-                        <span class="info-val">${esc(d.expected_end_date||'—')}</span>
+                        <span class="info-val">${esc(d.expected_end_date||'---')}</span>
                     </div>
 
                 </div>
@@ -1215,6 +1267,7 @@ function fillAccount(d){
     applyAvatars(d);
     document.getElementById('profileName').textContent=d.full_name||'—';
     document.getElementById('profileEmail').textContent=d.email||'—';
+    const _rb=document.getElementById('accReportBtn'); if(_rb) _rb.style.display=d.report_available?'inline-block':'none';
     document.getElementById('accTotalViews').textContent=Number(d.current_views||0).toLocaleString();
     document.getElementById('accTotalSpent').textContent=d.budget_total?'$'+Number(d.budget_total).toLocaleString():'—';
     const cl=document.getElementById('campaignsList');
@@ -1232,7 +1285,7 @@ function fillAccount(d){
             <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:8px;">
                 <div>
                     <div class="campaign-item-id">${esc(camp.campaign_id)} ${isCurrent?'<span style="font-size:10px;font-weight:700;color:#00cc6a;background:rgba(0,204,106,0.1);border:1px solid rgba(0,204,106,0.2);border-radius:20px;padding:2px 8px;margin-left:6px;">Current</span>':''}</div>
-                    <div class="campaign-item-dates">${esc(camp.campaign_name||'')} · ${esc(camp.start_date||'')} → ${esc(camp.expected_end_date||'')}</div>
+                    <div class="campaign-item-dates">${esc(camp.campaign_name||'')} · ${esc(camp.start_date||'')} → ${esc(camp.expected_end_date||'---')}</div>
                 </div>
                 <span class="campaign-item-status ${scls}">${campCs.charAt(0)+campCs.slice(1).toLowerCase()}</span>
             </div>

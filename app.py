@@ -23,7 +23,7 @@ app.permanent_session_lifetime = timedelta(days=7)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = os.getenv("FLASK_ENV") == "production"
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024   # room for uploaded report PDFs
 app.secret_key = os.getenv("SECRET_KEY")
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().strip("'\"")
@@ -180,6 +180,66 @@ def create_tables():
                     website_campaign_id VARCHAR(40),
                     synced_at DATETIME,
                     received_at DATETIME DEFAULT NOW()
+                )
+            """)
+
+            # Client clip appeals (dispute a clip's current status)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS appeals (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    campaign_id VARCHAR(40),
+                    clip_url VARCHAR(500),
+                    clipper_name VARCHAR(255),
+                    platform VARCHAR(50),
+                    current_status VARCHAR(20),
+                    desired_status VARCHAR(20),
+                    reason TEXT,
+                    client_email VARCHAR(255),
+                    status VARCHAR(20) DEFAULT 'open',
+                    decision VARCHAR(20),
+                    resolved_by VARCHAR(255),
+                    resolved_at DATETIME,
+                    created_at DATETIME DEFAULT NOW(),
+                    expires_at DATETIME,
+                    INDEX idx_campaign (campaign_id)
+                )
+            """)
+
+            # Manager requests for heavy actions (need super-admin approval)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS permits (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    campaign_id VARCHAR(40),
+                    manager_email VARCHAR(255),
+                    action VARCHAR(50),
+                    note TEXT,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    resolved_by VARCHAR(255),
+                    resolved_at DATETIME,
+                    created_at DATETIME DEFAULT NOW()
+                )
+            """)
+
+            # Website->bot clip status changes (bot polls this to update Discord)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS clip_sync_outbox (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    campaign_id VARCHAR(40),
+                    clip_url VARCHAR(500),
+                    status VARCHAR(20),
+                    reason TEXT,
+                    processed INT DEFAULT 0,
+                    created_at DATETIME DEFAULT NOW()
+                )
+            """)
+
+            # Campaign reports (auto-generated or uploaded PDF)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS reports (
+                    campaign_id VARCHAR(40) PRIMARY KEY,
+                    mode VARCHAR(20),
+                    pdf_data LONGTEXT,
+                    created_at DATETIME DEFAULT NOW()
                 )
             """)
 
@@ -810,8 +870,9 @@ def admin_create_campaign():
     end = data.get('expected_end_date')
     password = data.get('password')
 
-    if not all([client_email, campaign_name, budget, views, start, end, password]):
+    if not all([client_email, campaign_name, budget, views, start, password]):
         return jsonify({'success': False, 'message': 'All fields required'}), 400
+    end = end or None   # end date optional; shows "---" until the campaign ends
 
     password_hash = pbkdf2_sha256.hash(password)
 
@@ -997,7 +1058,7 @@ def admin_complete_campaign():
     data = request.get_json()
     campaign_id = data.get('campaign_id')
     cur = mysql.connection.cursor()
-    cur.execute("UPDATE campaigns SET status='COMPLETED' WHERE campaign_id=%s", (campaign_id,))
+    cur.execute("UPDATE campaigns SET status='COMPLETED', expected_end_date=CURDATE() WHERE campaign_id=%s", (campaign_id,))
     # FIX: Set user status to COMPLETED not ACTIVE
     cur.execute("UPDATE users SET account_status='COMPLETED' WHERE campaign_id=%s", (campaign_id,))
     mysql.connection.commit()
@@ -1456,6 +1517,169 @@ def admin_sync_unlink():
     return jsonify({'success': True})
 
 # ==========================================
+# APPEALS (client disputes) + PERMITS (manager requests) + REPORTS
+# ==========================================
+
+@app.route('/api/admin/appeals')
+def admin_appeals_list():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    a = eff_admin()
+    cur = mysql.connection.cursor()
+    base = "SELECT ap.*, c.campaign_name FROM appeals ap LEFT JOIN campaigns c ON ap.campaign_id=c.campaign_id "
+    if a['role'] == 'super':
+        cur.execute(base + "ORDER BY ap.created_at DESC")
+    else:
+        cur.execute(base + "WHERE c.assigned_admin_email=%s ORDER BY ap.created_at DESC", (a['email'],))
+    rows = cur.fetchall()
+    cur.close()
+    now = datetime.now()
+    out = []
+    for r in rows:
+        exp = r.get('expires_at')
+        st = r['status']
+        if st == 'open' and exp and now > exp:
+            st = 'expired'
+        out.append({
+            'id': r['id'], 'campaign_id': r['campaign_id'], 'campaign_name': r.get('campaign_name'),
+            'clip_url': r['clip_url'], 'clipper_name': r['clipper_name'], 'platform': r['platform'],
+            'current_status': r['current_status'], 'desired_status': r['desired_status'],
+            'reason': r['reason'], 'status': st, 'decision': r.get('decision'),
+            'resolved_by': r.get('resolved_by'),
+            'created_at': str(r['created_at']) if r.get('created_at') else None,
+            'expires_at': str(exp) if exp else None,
+        })
+    return jsonify({'success': True, 'appeals': out})
+
+@app.route('/api/admin/appeals/resolve', methods=['POST'])
+def admin_appeals_resolve():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    data = request.get_json()
+    appeal_id = data.get('id')
+    decision  = (data.get('decision') or '').strip().lower()   # approved / rejected (clip outcome)
+    reason    = (data.get('reason') or '').strip()
+    if decision not in ('approved', 'rejected'):
+        return jsonify({'success': False, 'message': 'decision must be approved/rejected'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id, clip_url FROM appeals WHERE id=%s AND status='open'", (appeal_id,))
+    ap = cur.fetchone()
+    if not ap:
+        cur.close(); return jsonify({'success': False, 'message': 'Appeal not found or already resolved'}), 404
+    if not can_access_campaign(cur, ap['campaign_id']):
+        cur.close(); return jsonify({'success': False}), 403
+    who = eff_admin().get('name') or eff_admin().get('email')
+    cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s, reviewed_by=%s WHERE campaign_id=%s AND url=%s",
+                (decision, reason or None, who, ap['campaign_id'], ap['clip_url']))
+    cur.execute("UPDATE clips SET status=%s, reject_reason=%s, reviewed_by=%s WHERE campaign_id=%s AND url=%s",
+                (decision, reason or None, who, ap['campaign_id'], ap['clip_url']))
+    resync_campaign_views(cur, ap['campaign_id'])
+    cur.execute("INSERT INTO clip_sync_outbox (campaign_id, clip_url, status, reason) VALUES (%s,%s,%s,%s)",
+                (ap['campaign_id'], ap['clip_url'], decision, reason or None))
+    cur.execute("UPDATE appeals SET status='resolved', decision=%s, resolved_by=%s, resolved_at=NOW() WHERE id=%s",
+                (decision, who, appeal_id))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/appeals/extend', methods=['POST'])
+def admin_appeals_extend():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    data = request.get_json()
+    hours = int(data.get('hours') or 48)
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE appeals SET expires_at = DATE_ADD(COALESCE(expires_at, NOW()), INTERVAL %s HOUR) WHERE id=%s AND status='open'",
+                (hours, data.get('id')))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/permits/request', methods=['POST'])
+def admin_permit_request():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    a = eff_admin()
+    if a['role'] == 'super':
+        return jsonify({'success': False, 'message': 'Super admin does not need a permit'}), 400
+    data = request.get_json()
+    campaign_id = data.get('campaign_id')
+    action = (data.get('action') or '').strip()
+    note = (data.get('note') or '').strip()
+    if not campaign_id or not action:
+        return jsonify({'success': False, 'message': 'campaign and action required'}), 400
+    cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close(); return jsonify({'success': False}), 403
+    cur.execute("INSERT INTO permits (campaign_id, manager_email, action, note) VALUES (%s,%s,%s,%s)",
+                (campaign_id, a['email'], action, note))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/permits')
+def admin_permits_list():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT p.*, c.campaign_name FROM permits p LEFT JOIN campaigns c ON p.campaign_id=c.campaign_id ORDER BY p.created_at DESC")
+    rows = cur.fetchall()
+    cur.close()
+    for r in rows:
+        r['created_at'] = str(r['created_at']) if r.get('created_at') else None
+        r['resolved_at'] = str(r['resolved_at']) if r.get('resolved_at') else None
+    return jsonify({'success': True, 'permits': rows})
+
+@app.route('/api/admin/permits/resolve', methods=['POST'])
+def admin_permit_resolve():
+    if not is_super():
+        return jsonify({'success': False}), 403
+    data = request.get_json()
+    pid = data.get('id')
+    approve = bool(data.get('approve'))
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id, action, status FROM permits WHERE id=%s", (pid,))
+    p = cur.fetchone()
+    if not p or p['status'] != 'pending':
+        cur.close(); return jsonify({'success': False, 'message': 'Not found or already resolved'}), 404
+    who = session.get('admin_name') or session.get('admin_email')
+    if approve:
+        if p['action'] == 'complete_campaign':
+            cur.execute("UPDATE campaigns SET status='COMPLETED', expected_end_date=CURDATE() WHERE campaign_id=%s", (p['campaign_id'],))
+            cur.execute("UPDATE users SET account_status='COMPLETED' WHERE campaign_id=%s", (p['campaign_id'],))
+        cur.execute("UPDATE permits SET status='approved', resolved_by=%s, resolved_at=NOW() WHERE id=%s", (who, pid))
+    else:
+        cur.execute("UPDATE permits SET status='denied', resolved_by=%s, resolved_at=NOW() WHERE id=%s", (who, pid))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/report/set', methods=['POST'])
+def admin_report_set():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    data = request.get_json()
+    campaign_id = data.get('campaign_id')
+    mode = (data.get('mode') or 'auto').strip().lower()
+    pdf_data = data.get('pdf_data')
+    cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close(); return jsonify({'success': False}), 403
+    if mode == 'uploaded':
+        if not pdf_data or not pdf_data.startswith('data:application/pdf'):
+            cur.close(); return jsonify({'success': False, 'message': 'Upload a PDF file'}), 400
+        if len(pdf_data) > 9_000_000:
+            cur.close(); return jsonify({'success': False, 'message': 'PDF too large'}), 400
+    else:
+        pdf_data = None
+    cur.execute("""INSERT INTO reports (campaign_id, mode, pdf_data) VALUES (%s,%s,%s)
+                   ON DUPLICATE KEY UPDATE mode=VALUES(mode), pdf_data=VALUES(pdf_data), created_at=NOW()""",
+                (campaign_id, mode, pdf_data))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
+# ==========================================
 # ADMIN ACCOUNT SETTINGS (own password + picture)
 # ==========================================
 
@@ -1659,12 +1883,34 @@ def bot_campaign_finished():
     row = cur.fetchone()
     if row and row.get('website_campaign_id'):
         cid = row['website_campaign_id']
-        cur.execute("UPDATE campaigns SET status='COMPLETED' WHERE campaign_id=%s", (cid,))
+        cur.execute("UPDATE campaigns SET status='COMPLETED', expected_end_date=CURDATE() WHERE campaign_id=%s", (cid,))
         cur.execute("UPDATE users SET account_status='COMPLETED' WHERE campaign_id=%s", (cid,))
     cur.execute("UPDATE discord_campaigns SET sync_status='closed' WHERE slug=%s", (slug,))
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
+
+
+@app.route('/api/bot/outbox', methods=['POST'])
+def bot_outbox():
+    """Bot polls this to apply website-side clip status changes (appeal resolutions) back to Discord."""
+    if not bot_auth():
+        return jsonify({'success': False}), 401
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        SELECT o.id, o.clip_url, o.status, o.reason, d.slug
+        FROM clip_sync_outbox o
+        LEFT JOIN discord_campaigns d ON o.campaign_id = d.website_campaign_id
+        WHERE o.processed=0 ORDER BY o.id ASC LIMIT 50
+    """)
+    rows = cur.fetchall()
+    ids = [r['id'] for r in rows]
+    if ids:
+        fmt = ','.join(['%s'] * len(ids))
+        cur.execute(f"UPDATE clip_sync_outbox SET processed=1 WHERE id IN ({fmt})", tuple(ids))
+        mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True, 'changes': rows})
 
 
 @app.route('/api/bot/update-views', methods=['POST'])
@@ -1757,12 +2003,17 @@ def dashboard_data():
     for c in all_campaigns:
         if c.get('start_date'): c['start_date'] = str(c['start_date'])
         if c.get('expected_end_date'): c['expected_end_date'] = str(c['expected_end_date'])
+    report_avail = False
+    if row and row.get('campaign_id'):
+        cur.execute("SELECT campaign_id FROM reports WHERE campaign_id=%s", (row['campaign_id'],))
+        report_avail = bool(cur.fetchone())
     cur.close()
 
     if not row:
         return jsonify({'success': False, 'message': 'User not found'}), 404
 
     row['all_campaigns'] = all_campaigns
+    row['report_available'] = report_avail
 
     if row.get('start_date'):
         row['start_date'] = str(row['start_date'])
@@ -1911,6 +2162,42 @@ def dashboard_all_clips():
     }
     return jsonify({'success': True, 'clips': clips, 'summary': summary})
 
+@app.route('/api/dashboard/appeal', methods=['POST'])
+def dashboard_appeal():
+    """Client disputes a clip's current status. Goes to the Appeals queue (48h)."""
+    if 'user_email' not in session:
+        return jsonify({'success': False}), 401
+    data = request.get_json()
+    clip_url = (data.get('clip_url') or '').strip()
+    desired  = (data.get('desired_status') or '').strip().lower()
+    reason   = (data.get('reason') or '').strip()
+    if desired not in ('approved', 'rejected'):
+        return jsonify({'success': False, 'message': 'Pick approve or reject'}), 400
+    if not clip_url:
+        return jsonify({'success': False, 'message': 'Clip required'}), 400
+    email = session['user_email']
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM users WHERE email=%s", (email,))
+    u = cur.fetchone()
+    if not u or not u['campaign_id']:
+        cur.close(); return jsonify({'success': False, 'message': 'No campaign'}), 400
+    cid = u['campaign_id']
+    cur.execute("SELECT clipper_name, platform, status FROM top_clips WHERE campaign_id=%s AND url=%s LIMIT 1", (cid, clip_url))
+    clip = cur.fetchone()
+    if not clip:
+        cur.close(); return jsonify({'success': False, 'message': 'Clip not found'}), 404
+    cur.execute("SELECT id FROM appeals WHERE campaign_id=%s AND clip_url=%s AND status='open'", (cid, clip_url))
+    if cur.fetchone():
+        cur.close(); return jsonify({'success': False, 'message': 'An appeal is already open for this clip'}), 400
+    cur.execute("""INSERT INTO appeals (campaign_id, clip_url, clipper_name, platform, current_status,
+                       desired_status, reason, client_email, expires_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (cid, clip_url, clip.get('clipper_name'), clip.get('platform'), clip.get('status'),
+                 desired, reason, email, datetime.now() + timedelta(hours=48)))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
 @app.route('/api/dashboard/weekly-milestones')
 def dashboard_weekly_milestones():
     if 'user_email' not in session:
@@ -2029,6 +2316,22 @@ def dashboard_report():
     if not d or not d['campaign_id']:
         cur.close()
         return jsonify({'error': 'No campaign found'}), 404
+
+    # Report is only available once an admin has set it up (auto or uploaded)
+    cur.execute("SELECT mode, pdf_data FROM reports WHERE campaign_id=%s", (d['campaign_id'],))
+    rep = cur.fetchone()
+    if not rep:
+        cur.close()
+        return jsonify({'error': 'Report not ready yet'}), 404
+    if rep.get('mode') == 'uploaded' and rep.get('pdf_data'):
+        import base64
+        cur.close()
+        b64 = rep['pdf_data'].split(',', 1)[-1]
+        buf = BytesIO(base64.b64decode(b64))
+        return send_file(buf, as_attachment=True,
+                         download_name=f"MagnetiseMedia_Report_{d['campaign_id']}.pdf",
+                         mimetype='application/pdf')
+    # mode == 'auto' → fall through and generate the PDF below
 
     if d and d['expected_end_date']:
         expiry = d['expected_end_date']
