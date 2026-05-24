@@ -154,6 +154,21 @@ def create_tables():
                 )
             """)
 
+            # Widen view columns INT -> BIGINT so large counts don't overflow (error 1264).
+            # campaigns/users pre-exist so these are ALTERs; each is guarded so one failure
+            # (e.g. table missing on a fresh DB) won't abort the rest.
+            for _alter in (
+                "ALTER TABLE campaigns MODIFY current_views BIGINT",
+                "ALTER TABLE campaigns MODIFY target_views BIGINT",
+                "ALTER TABLE views_history MODIFY views BIGINT NOT NULL",
+                "ALTER TABLE top_clips MODIFY views BIGINT DEFAULT 0",
+                "ALTER TABLE clips MODIFY views BIGINT DEFAULT 0",
+            ):
+                try:
+                    cur.execute(_alter)
+                except Exception as _ae:
+                    print(f"skip alter: {_ae}")
+
             mysql.connection.commit()
             cur.close()
             print("All tables created successfully.")
@@ -653,22 +668,27 @@ def admin_create_campaign():
     campaign_id = 'CX-' + datetime.now().strftime('%y%m%d') + secrets.token_hex(3).upper()
 
     cur = mysql.connection.cursor()
-    cur.execute("""INSERT INTO campaigns
-                   (campaign_id, client_email, campaign_name, budget_total, target_views, start_date, expected_end_date, status, created_by)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s)""",
-                (campaign_id, client_email, campaign_name, budget, views, start, end, session['admin_email']))
-    # Only set password if this is first campaign (no existing hash)
-    cur.execute("SELECT password_hash FROM users WHERE email=%s", (client_email,))
-    existing = cur.fetchone()
-    if existing and existing['password_hash']:
-        # Repeat client — keep existing password, just update active campaign
-        cur.execute("UPDATE users SET account_status='ACTIVE', campaign_id=%s WHERE email=%s",
-                    (campaign_id, client_email))
-    else:
-        # First campaign — set password
-        cur.execute("UPDATE users SET account_status='ACTIVE', password_hash=%s, campaign_id=%s WHERE email=%s",
-                    (password_hash, campaign_id, client_email))
-    mysql.connection.commit()
+    try:
+        cur.execute("""INSERT INTO campaigns
+                       (campaign_id, client_email, campaign_name, budget_total, target_views, start_date, expected_end_date, status, created_by)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s)""",
+                    (campaign_id, client_email, campaign_name, budget, views, start, end, session['admin_email']))
+        # Only set password if this is first campaign (no existing hash)
+        cur.execute("SELECT password_hash FROM users WHERE email=%s", (client_email,))
+        existing = cur.fetchone()
+        if existing and existing['password_hash']:
+            # Repeat client — keep existing password, just update active campaign
+            cur.execute("UPDATE users SET account_status='ACTIVE', campaign_id=%s WHERE email=%s",
+                        (campaign_id, client_email))
+        else:
+            # First campaign — set password
+            cur.execute("UPDATE users SET account_status='ACTIVE', password_hash=%s, campaign_id=%s WHERE email=%s",
+                        (password_hash, campaign_id, client_email))
+        mysql.connection.commit()
+    except Exception as e:
+        mysql.connection.rollback()
+        cur.close()
+        return jsonify({'success': False, 'message': f'Database error: {str(e)}'}), 400
     cur.close()
     return jsonify({'success': True, 'campaign_id': campaign_id, 'campaign_name': campaign_name})
 
