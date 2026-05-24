@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Magnetise Media</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
 
         * {
@@ -940,40 +939,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// THREE.JS RIBBON BG — greyscale/white
-let scene, camera, renderer, ribbon, time = 0;
-function init3D() {
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 12);
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, precision: 'highp' });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    const c = renderer.domElement;
-    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;';
-    document.body.appendChild(c);
-    const mat = new THREE.ShaderMaterial({
-        uniforms: {
-            uTime:  { value: 0 },
-            uBlue1: { value: new THREE.Color(0x2a2a2a) },
-            uBlue2: { value: new THREE.Color(0x444444) },
-            uCyan:  { value: new THREE.Color(0x888888) },
-            uDark:  { value: new THREE.Color(0x0a0a0a) }
-        },
-        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-        fragmentShader: `uniform float uTime;uniform vec3 uBlue1,uBlue2,uCyan,uDark;varying vec2 vUv;varying vec3 vNormal;void main(){float flow=sin(vUv.x*6.28318+uTime*1.2)*.5+.5;vec3 color=mix(uDark,uBlue1,vUv.x);color=mix(color,uBlue2,flow);color=mix(color,uCyan,pow(flow,2.)*.6);float fresnel=pow(1.-abs(dot(vNormal,vec3(0,0,1))),2.);color+=uCyan*fresnel*.5;float rg=pow(1.-abs(vUv.y*2.-1.),1.5);color+=vec3(rg*.25);color+=uCyan*(sin(vUv.x*12.56+uTime*2.)*.5+.5)*.15;float alpha=smoothstep(0.,.15,vUv.x)*smoothstep(1.,.85,vUv.x);gl_FragColor=vec4(color,alpha*.9);}`,
-        transparent: true, side: THREE.DoubleSide
-    });
-    function pts(t){const p=[];for(let i=0;i<150;i++){const t2=i/150;p.push(new THREE.Vector3((t2-.5)*30,Math.sin(t2*Math.PI*2.5+t*.3)*6,Math.cos(t2*Math.PI*1.2+t*.2)*3));}return p;}
-    ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)),150,2.5,32,false), mat);
-    scene.add(ribbon);
-    scene.add(new THREE.AmbientLight(0x111111, 1));
-    const l1 = new THREE.PointLight(0x555555, 2, 25); l1.position.set(-8,5,8); scene.add(l1);
-    const l2 = new THREE.PointLight(0x888888, 1.5, 25); l2.position.set(8,-5,8); scene.add(l2);
-    window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);});
-    (function loop(){requestAnimationFrame(loop);time+=.004;ribbon.geometry.dispose();ribbon.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(time)),150,2.5,32,false);ribbon.material.uniforms.uTime.value=time;ribbon.rotation.y=Math.sin(time*.15)*.2;ribbon.rotation.x=Math.cos(time*.1)*.1;camera.position.x=Math.sin(time*.12)*2;camera.position.y=Math.cos(time*.08)*1;camera.lookAt(0,0,0);renderer.render(scene,camera);})();
-}
-init3D();
+// (background animation removed for performance)
 
 // ADMIN LOGIC
 let currentClient = null, lastCampaignData = null;
@@ -1428,7 +1394,7 @@ function openDetails(c){
     const cv = Number(c.current_views||0), tv = Number(c.target_views||0);
     const pct = tv ? Math.min(Math.round((cv/tv)*100),100) : 0;
     const budget = Number(c.budget_total||0);
-    const ops = Math.round(budget*0.30), guarantee = budget - ops;
+    const ops = Math.round(budget*0.20), guarantee = budget - ops;
     const cpm = c.cpm_rate ? '$'+Number(c.cpm_rate).toFixed(2) : 'Not set';
     const sm = {ACTIVE:['status-active','Active'],PENDING:['status-pending','Pending'],REJECTED:['status-rejected','Rejected'],COMPLETED:['status-completed','Completed']}[(c.account_status||'').toUpperCase()] || ['status-pending', c.account_status||'—'];
     document.getElementById('detailsTitle').textContent = c.full_name || 'Client';
@@ -1445,8 +1411,8 @@ function openDetails(c){
             <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin:10px 0 14px;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#aaa,#fff);border-radius:3px;"></div></div>
             <div class="dv-row"><span>Progress</span><b>${pct}%</b></div>
             <div class="dv-row"><span>Total Budget</span><b>$${budget.toLocaleString()}</b></div>
-            <div class="dv-row"><span>Ops Fee (30%)</span><b style="color:#ff8080;">$${ops.toLocaleString()}</b></div>
-            <div class="dv-row"><span>View Guarantee (70%)</span><b style="color:#00cc6a;">$${guarantee.toLocaleString()}</b></div>
+            <div class="dv-row"><span>Ops Fee (20%)</span><b style="color:#fff;">$${ops.toLocaleString()}</b></div>
+            <div class="dv-row"><span>View Guarantee (80%)</span><b style="color:#00cc6a;">$${guarantee.toLocaleString()}</b></div>
             <div class="dv-row"><span>CPM (Cost / 1k)</span><b>${cpm}</b></div>
             <div class="dv-row"><span>Start</span><b>${esc((c.start_date||'—').slice(0,10))}</b></div>
             <div class="dv-row"><span>Expected End</span><b>${esc((c.expected_end_date||'—').slice(0,10))}</b></div>

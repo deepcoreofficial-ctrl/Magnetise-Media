@@ -1537,12 +1537,12 @@ def dashboard_report():
     story.append(t)
 
     story.append(Paragraph('Budget Breakdown', h2_style))
-    ops_fee = round(budget * 0.30)
+    ops_fee = round(budget * 0.20)
     view_budget = budget - ops_fee
     bdata = [
         ['Total Budget', f"${budget:,.0f}"],
-        ['Operations Fee (30%)', f"${ops_fee:,.0f}"],
-        ['View Guarantee (70%)', f"${view_budget:,.0f}"],
+        ['Operations Fee (20%)', f"${ops_fee:,.0f}"],
+        ['View Guarantee (80%)', f"${view_budget:,.0f}"],
         ['Cost per 1,000 Views (CPM)', f"${d['cpm_rate']:.2f}" if d['cpm_rate'] else 'N/A'],
     ]
     bt = Table(bdata, colWidths=[120*mm, 50*mm])
@@ -1652,8 +1652,8 @@ def admin_invoice(campaign_id):
     story.append(HRFlowable(width="100%", thickness=1, color=DARK, spaceAfter=20))
 
     budget = float(d['budget_total'] or 0)
-    ops_fee = round(budget * 0.30, 2)
-    view_guarantee = round(budget * 0.70, 2)
+    ops_fee = round(budget * 0.20, 2)
+    view_guarantee = round(budget * 0.80, 2)
 
     # Invoice meta
     invoice_no = f"INV-{d['campaign_id']}"
@@ -1669,8 +1669,8 @@ def admin_invoice(campaign_id):
     story.append(Paragraph('Services', ParagraphStyle('H2', fontSize=13, fontName='Helvetica-Bold', spaceAfter=10)))
     items = [
         ['Description', 'Details', 'Amount'],
-        ['Campaign Management (Ops Fee 30%)', f"{d['campaign_name']}", f"${ops_fee:,.2f}"],
-        [f'View Guarantee (70%) — {d["target_views"]:,} views', f'{str(d["start_date"])} → {str(d["expected_end_date"])}', f"${view_guarantee:,.2f}"],
+        ['Campaign Management (Ops Fee 20%)', f"{d['campaign_name']}", f"${ops_fee:,.2f}"],
+        [f'View Guarantee (80%) — {d["target_views"]:,} views', f'{str(d["start_date"])} → {str(d["expected_end_date"])}', f"${view_guarantee:,.2f}"],
         ['', '', ''],
         ['TOTAL', '', f"${budget:,.2f}"],
     ]

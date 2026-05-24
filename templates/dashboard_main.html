@@ -6,7 +6,6 @@
     <title>My Dashboard - Magnetise Media</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0;}
         body{background:#0a0a0a;font-family:'Inter',sans-serif;color:#fff;min-height:100vh;overflow-x:hidden;}
@@ -81,7 +80,7 @@
         .status-pill{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;margin-bottom:24px;}
         .status-active{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);color:#00cc6a;}
         .status-completed{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#ccc;}
-        .status-extended{background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);color:#ffb300;}
+        .status-extended{background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);color:#fff;}
         .status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite;}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 
@@ -101,7 +100,7 @@
         .stat-value{font-size:24px;font-weight:800;color:#ffffff;}
         .stat-value.white{color:#fff;}
         .stat-value.green{color:#00cc6a;}
-        .stat-value.amber{color:#ffb300;}
+        .stat-value.amber{color:#fff;}
 
         /* ── PROGRESS ── */
         .progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
@@ -142,8 +141,8 @@
         /* ── PENDING ── */
         .pending-state{text-align:center;padding:48px 24px;}
         .pending-icon{width:64px;height:64px;border-radius:50%;background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
-        .pending-icon svg{color:#ffb300;width:28px;height:28px;}
-        .pending-state h3{color:#ffb300;font-size:20px;font-weight:700;margin-bottom:8px;}
+        .pending-icon svg{color:#fff;width:28px;height:28px;}
+        .pending-state h3{color:#fff;font-size:20px;font-weight:700;margin-bottom:8px;}
         .pending-state p{color:#555;font-size:14px;line-height:1.7;max-width:420px;margin:0 auto;}
 
         /* ── ACCOUNT ── */
@@ -356,51 +355,6 @@
 </head>
 <body>
 
-<!-- ── GREYSCALE ANIMATED TUBE BG ── -->
-<script>
-(function(){
-    const s = new THREE.Scene();
-    const cam = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
-    cam.position.set(0, 0, 12);
-    const r = new THREE.WebGLRenderer({antialias:true, alpha:true});
-    r.setSize(innerWidth, innerHeight);
-    r.setPixelRatio(Math.min(devicePixelRatio, 2));
-    const c = r.domElement;
-    c.style.cssText = 'position:fixed;top:0;left:0;z-index:0;pointer-events:none;opacity:0.18;';
-    document.body.appendChild(c);
-
-    const mat = new THREE.ShaderMaterial({
-        uniforms: { uTime: {value:0} },
-        vertexShader: `varying vec2 vUv;varying vec3 vNormal;void main(){vUv=uv;vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-        fragmentShader: `uniform float uTime;varying vec2 vUv;varying vec3 vNormal;void main(){float flow=sin(vUv.x*6.28318+uTime*1.2)*.5+.5;float grey=mix(0.12,0.72,flow);vec3 color=vec3(grey);float fresnel=pow(1.-abs(dot(vNormal,vec3(0,0,1))),2.);color+=vec3(fresnel*0.28);color+=vec3((sin(vUv.x*12.56+uTime*2.)*.5+.5)*0.08);float alpha=smoothstep(0.,.15,vUv.x)*smoothstep(1.,.85,vUv.x);gl_FragColor=vec4(color,alpha*.92);}`,
-        transparent:true, side:THREE.DoubleSide
-    });
-
-    let ribbon, t = 0;
-    function pts(tf){
-        const p=[];
-        for(let i=0;i<150;i++){const t2=i/150;p.push(new THREE.Vector3((t2-.5)*30,Math.sin(t2*Math.PI*2.5+tf*.3)*6,Math.cos(t2*Math.PI*1.2+tf*.2)*3));}
-        return p;
-    }
-    ribbon = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(0)),150,2.5,32,false), mat);
-    s.add(ribbon);
-    s.add(new THREE.AmbientLight(0xffffff, 0.3));
-    window.addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
-    (function loop(){
-        requestAnimationFrame(loop); t+=.004;
-        ribbon.geometry.dispose();
-        ribbon.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts(t)),150,2.5,32,false);
-        mat.uniforms.uTime.value=t;
-        ribbon.rotation.y=Math.sin(t*.15)*.2;
-        ribbon.rotation.x=Math.cos(t*.1)*.1;
-        cam.position.x=Math.sin(t*.12)*2;
-        cam.position.y=Math.cos(t*.08)*1;
-        cam.lookAt(0,0,0);
-        r.render(s,cam);
-    })();
-})();
-</script>
-
 <!-- SIDEBAR TOGGLE -->
 <div class="toggle-btn" id="toggleBtn" onclick="toggleSidebar()">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -539,7 +493,7 @@
                 <div class="faq-item"><div class="faq-q">When does the views graph update?</div><div class="faq-a">Your views graph updates every time our team logs new data for your campaign. We update regularly during active campaigns.</div></div>
                 <div class="faq-item"><div class="faq-q">When do top clips appear?</div><div class="faq-a">Only clips with 10,000+ views are shown. They appear automatically once they cross that threshold.</div></div>
                 <div class="faq-item"><div class="faq-q">I forgot my password — what do I do?</div><div class="faq-a">Go to the login page and click "Forgot password?" — You can securely reset your password instantly using email verification.</div></div>
-                <div class="faq-item"><div class="faq-q">How does the refund policy work?</div><div class="faq-a">30% of your budget is a non-refundable operations fee. The remaining 70% is your view guarantee — if views are not delivered after 30 days, you are eligible for a refund on undelivered views.</div></div>
+                <div class="faq-item"><div class="faq-q">How does the refund policy work?</div><div class="faq-a">20% of your budget is a non-refundable operations fee. The remaining 80% is your view guarantee — if views are not delivered after 30 days, you are eligible for a refund on undelivered views.</div></div>
                 <div class="faq-item"><div class="faq-q">My views seem incorrect?</div><div class="faq-a">Contact us at magnetisemedia.co@gmail.com with your Campaign ID and we will investigate right away.</div></div>
                 <div class="faq-item" style="border-bottom:none;"><div class="faq-q">How long do clips stay live?</div><div class="faq-a">Clips remain live for a minimum of 2 months after campaign completion, continuing to accumulate organic views during this period.</div></div>
             </div>
@@ -634,7 +588,7 @@ function renderDashboard(d){
     const cv=d.current_views||0,tv=d.target_views||1;
     const pct=Math.min(Math.round((cv/tv)*100),100);
     const budget=Number(d.budget_total||0);
-    const opsFee=Math.round(budget*0.30);
+    const opsFee=Math.round(budget*0.20);
     const viewBudget=budget-opsFee;
     const cs=getCampaignStatus(d);
     const elapsed=daysElapsed(d.start_date);
@@ -747,7 +701,7 @@ function renderDashboard(d){
     }
 
     document.getElementById('dashboardContent').innerHTML=`
-        ${statusPillHTML(cs)}
+        <div style="text-align:center;">${statusPillHTML(cs)}</div>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-label">Current Views</div><div class="stat-value">${Number(cv).toLocaleString()}</div></div>
             <div class="stat-card"><div class="stat-label">Target Views</div><div class="stat-value white">${Number(tv).toLocaleString()}</div></div>
@@ -785,8 +739,8 @@ function renderDashboard(d){
                 <div class="section-title">Budget Transparency</div>
                 <div class="info-row"><span class="info-key">Total Budget</span><span class="info-val">$${budget.toLocaleString()}</span></div>
                 <div class="budget-breakdown">
-                    <div class="budget-part"><div class="budget-part-label">Ops Fee (30%)</div><div class="budget-part-val" style="color:#ff5555;">$${opsFee.toLocaleString()}</div><div class="budget-part-sub">Non-refundable</div></div>
-                    <div class="budget-part"><div class="budget-part-label">View Guarantee (70%)</div><div class="budget-part-val" style="color:#00cc6a;">$${viewBudget.toLocaleString()}</div><div class="budget-part-sub">Refundable if undelivered</div></div>
+                    <div class="budget-part"><div class="budget-part-label">Ops Fee (20%)</div><div class="budget-part-val" style="color:#fff;">$${opsFee.toLocaleString()}</div><div class="budget-part-sub">Non-refundable</div></div>
+                    <div class="budget-part"><div class="budget-part-label">View Guarantee (80%)</div><div class="budget-part-val" style="color:#00cc6a;">$${viewBudget.toLocaleString()}</div><div class="budget-part-sub">Refundable if undelivered</div></div>
                 </div>
                 <div class="info-row" style="margin-top:12px;"><span class="info-key">Views Delivered</span><span class="info-val">${Number(cv).toLocaleString()}</span></div>
                 <div class="info-row"><span class="info-key">Views Remaining</span><span class="info-val">${Math.max(0,tv-cv).toLocaleString()}</span></div>
@@ -830,7 +784,7 @@ async function openCampaignAnalyticsModal(){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
             <div class="acc-stat"><div class="acc-stat-label">Total Views</div><div class="acc-stat-val">${Number(cv).toLocaleString()}</div></div>
             <div class="acc-stat"><div class="acc-stat-label">Target</div><div class="acc-stat-val" style="color:#ccc;">${Number(tv).toLocaleString()}</div></div>
-            <div class="acc-stat"><div class="acc-stat-label">Completion</div><div class="acc-stat-val" style="color:#ffb300;">${pct}%</div></div>
+            <div class="acc-stat"><div class="acc-stat-label">Completion</div><div class="acc-stat-val" style="color:#fff;">${pct}%</div></div>
             <div class="acc-stat"><div class="acc-stat-label">Cost/1k Views</div><div class="acc-stat-val" style="color:#00cc6a;">${cpm}</div></div>
         </div>
         <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px;margin-bottom:16px;">
@@ -839,8 +793,8 @@ async function openCampaignAnalyticsModal(){
             <div id="accNoGraph" style="display:none;text-align:center;padding:20px;color:#555;font-size:13px;">No history data yet.</div>
         </div>
         <div class="info-row"><span class="info-key">Budget</span><span class="info-val">$${budget.toLocaleString()}</span></div>
-        <div class="info-row"><span class="info-key">Ops Fee (30%)</span><span class="info-val" style="color:#ff5555;">$${Math.round(budget*0.30).toLocaleString()}</span></div>
-        <div class="info-row"><span class="info-key">View Guarantee (70%)</span><span class="info-val" style="color:#00cc6a;">$${Math.round(budget*0.70).toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">Ops Fee (20%)</span><span class="info-val" style="color:#fff;">$${Math.round(budget*0.20).toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">View Guarantee (80%)</span><span class="info-val" style="color:#00cc6a;">$${Math.round(budget*0.80).toLocaleString()}</span></div>
         <div class="info-row"><span class="info-key">Status</span><span class="info-val">${cs}</span></div>
         <div class="info-row"><span class="info-key">Start Date</span><span class="info-val">${esc(d.start_date||'—')}</span></div>
         <div class="info-row" style="border-bottom:none;"><span class="info-key">End Date</span><span class="info-val">${esc(d.expected_end_date||'—')}</span></div>
@@ -901,7 +855,7 @@ async function loadWeeklyMilestones(){
         document.getElementById('milestonesSection').style.display='';
         document.getElementById('milestonesGrid').innerHTML=data.weeks.map(w=>{
             const pct=w.target?Math.min(Math.round((w.delivered/w.target)*100),100):0;
-            const color=w.hit?'#4ade80':pct>=50?'#facc15':'#ff5555';
+            const color=w.hit?'#4ade80':pct>=50?'#fff':'#ff5555';
             return `<div style="display:grid;grid-template-columns:60px 1fr auto;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
                 <div style="font-size:12px;font-weight:700;color:#555;">Week ${w.week}</div>
                 <div>
@@ -1043,7 +997,7 @@ async function renderAnalytics(d){
     }
         document.getElementById('analyticsContent').innerHTML=`
 
-            ${statusPillHTML(cs)}
+            <div style="text-align:center;">${statusPillHTML(cs)}</div>
 
             <div class="analytics-grid">
 
@@ -1221,7 +1175,7 @@ function fillAccount(d){
                 </div>
                 <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
                     <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Progress</div>
-                    <div style="font-size:18px;font-weight:800;color:#ffb300;">${campPct}%</div>
+                    <div style="font-size:18px;font-weight:800;color:#fff;">${campPct}%</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;">
                     <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Budget</div>
