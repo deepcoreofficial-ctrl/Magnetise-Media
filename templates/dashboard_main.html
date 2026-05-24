@@ -277,6 +277,10 @@
         .clip-link:hover{color:#fff;border-color:rgba(255,255,255,0.35);}
         .clip-link svg{width:12px;height:12px;}
         .no-clips{text-align:center;padding:28px 16px;color:#555;font-size:13px;line-height:1.7;}
+        .clip-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:capitalize;}
+        .clip-status.approved{background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);color:#00cc6a;}
+        .clip-status.pending{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#ccc;}
+        .clip-status.rejected{background:rgba(255,85,85,0.08);border:1px solid rgba(255,85,85,0.2);color:#ff8080;}
 
         /* ── LEADERBOARD ── */
         .leaderboard-row{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
@@ -379,6 +383,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             Analytics
         </div>
+        <div class="sb-item" id="nav-clips" onclick="showPage('clips',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            Clips
+        </div>
         <div class="sb-item" id="nav-account" onclick="showPage('account',this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Account
@@ -422,6 +430,15 @@
             <p>Detailed performance breakdown</p>
         </div>
         <div id="analyticsContent"><div style="color:#555;padding:40px 0;">Loading...</div></div>
+    </div>
+
+    <!-- CLIPS PAGE -->
+    <div class="page" id="page-clips">
+        <div class="page-header">
+            <h1>My <span>Clips</span></h1>
+            <p>Every clip submitted to your campaign</p>
+        </div>
+        <div id="clipsContent"><div style="color:#555;padding:40px 0;">Loading...</div></div>
     </div>
 
     <!-- ACCOUNT PAGE -->
@@ -563,6 +580,7 @@ function showPage(name,el){
     el.classList.add('active');
     if(name==='analytics'&&_dashData)renderAnalytics(_dashData);
     if(name==='account'&&_dashData)fillAccount(_dashData);
+    if(name==='clips')loadClipsPage();
 }
 
 async function init(){
@@ -925,6 +943,54 @@ async function loadLeaderboard(){
         rows.forEach((r,i)=>{html+=`<div class="leaderboard-row"><div class="lb-rank ${rc(i)}">${i+1}</div><div><div class="lb-name">${esc(r.clipper_name||'Clipper #'+(i+1))}</div><div class="lb-platform">${esc(r.platform||'')}</div></div><div class="lb-views">${Number(r.views||0).toLocaleString()} views</div></div>`;});
         html+=`</div>`;section.innerHTML=html;
     }catch(e){section.innerHTML='';}
+}
+
+async function loadClipsPage(){
+    const el=document.getElementById('clipsContent');if(!el)return;
+    try{
+        const [cr,lr]=await Promise.all([fetch('/api/dashboard/clips'),fetch('/api/dashboard/leaderboard')]);
+        const cdata=await cr.json();
+        const ldata=await lr.json();
+        const clips=cdata.clips||[];
+        const s=cdata.summary||{total:0,approved:0,pending:0,rejected:0,approved_views:0};
+        const lb=ldata.leaderboard||[];
+        let html=`
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-label">Total Clips</div><div class="stat-value">${Number(s.total).toLocaleString()}</div></div>
+            <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-value green">${Number(s.approved).toLocaleString()}</div></div>
+            <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value">${Number(s.pending).toLocaleString()}</div></div>
+            <div class="stat-card"><div class="stat-label">Approved Views</div><div class="stat-value">${Number(s.approved_views).toLocaleString()}</div></div>
+        </div>`;
+        if(lb.length){
+            const rc=i=>i===0?'gold':i===1?'silver':i===2?'bronze':'';
+            html+=`<div class="glass" style="margin-bottom:20px;"><div class="section-title">Clipper Leaderboard</div>`;
+            lb.forEach((r,i)=>{html+=`<div class="leaderboard-row"><div class="lb-rank ${rc(i)}">${i+1}</div><div style="flex:1;"><div class="lb-name">${esc(r.clipper_name||'Clipper #'+(i+1))}</div><div class="lb-platform">${esc(r.platform||'')}</div></div><div class="lb-views">${Number(r.views||0).toLocaleString()} views</div></div>`;});
+            html+=`</div>`;
+        }
+        html+=`<div class="glass"><div class="section-title">All Submitted Clips</div>`;
+        if(clips.length===0){html+=`<div class="no-clips">No clips submitted yet.<br>Clippers submit through Discord and they'll appear here with their status.</div>`;}
+        else{
+            html+=`<div style="display:flex;flex-direction:column;gap:10px;">`;
+            clips.forEach(c=>{
+                const pc=platformClass(c.platform);
+                const st=(c.status||'pending').toLowerCase();
+                const safeUrl=(c.url&&/^https?:\/\//i.test(c.url))?esc(c.url).replace(/"/g,'&quot;'):null;
+                html+=`<div class="campaign-item" style="align-items:center;">
+                    <div style="min-width:0;flex:1;">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <span class="clip-platform ${pc}" style="margin-bottom:0;">${esc(c.platform||'Unknown')}</span>
+                            <span class="clip-status ${st}">${esc(st)}</span>
+                        </div>
+                        <div style="font-size:12px;color:#555;margin-top:6px;">${esc(c.clipper_name||'—')} · ${Number(c.views||0).toLocaleString()} views · ${esc((c.added_at||'').slice(0,10))}</div>
+                    </div>
+                    ${safeUrl?`<a class="clip-link" href="${safeUrl}" target="_blank" rel="noopener">View <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>`:''}
+                </div>`;
+            });
+            html+=`</div>`;
+        }
+        html+=`</div>`;
+        el.innerHTML=html;
+    }catch(e){el.innerHTML='<div class="no-clips">Could not load clips.</div>';}
 }
 
 async function renderAnalytics(d){

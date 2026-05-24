@@ -175,6 +175,11 @@ def create_tables():
                 "ALTER TABLE users MODIFY rejection_reason TEXT",
                 # Profile picture stored as a base64 data URL (survives Render redeploys)
                 "ALTER TABLE users ADD COLUMN profile_pic MEDIUMTEXT",
+                # Clip moderation status (pending/approved/rejected) — set by the Discord bot
+                "ALTER TABLE top_clips ADD COLUMN status VARCHAR(20) DEFAULT 'pending'",
+                "ALTER TABLE top_clips ADD COLUMN reject_reason TEXT",
+                "ALTER TABLE clips ADD COLUMN status VARCHAR(20) DEFAULT 'pending'",
+                "ALTER TABLE clips ADD COLUMN reject_reason TEXT",
                 # Normalize any legacy status value left over from the old schema
                 "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
@@ -283,6 +288,23 @@ def check_and_send_milestone_email(campaign_id, current_views, target_views, cur
                          html)
     except Exception as e:
         print(f"Milestone email failed: {e}")
+
+def resync_campaign_views(cur, campaign_id):
+    """Recompute a campaign's current_views from APPROVED clips only.
+    Logs a views_history point + runs the milestone check only when the total changes.
+    Returns the new approved total."""
+    cur.execute("SELECT COALESCE(SUM(views),0) AS total FROM top_clips WHERE campaign_id=%s AND status='approved'", (campaign_id,))
+    total = int((cur.fetchone() or {}).get('total') or 0)
+    cur.execute("SELECT current_views, target_views FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+    row = cur.fetchone()
+    if not row:
+        return total
+    if total != int(row.get('current_views') or 0):
+        cur.execute("UPDATE campaigns SET current_views=%s WHERE campaign_id=%s", (total, campaign_id))
+        cur.execute("INSERT INTO views_history (campaign_id, views) VALUES (%s,%s)", (campaign_id, total))
+        if row.get('target_views'):
+            check_and_send_milestone_email(campaign_id, total, int(row['target_views']), cur)
+    return total
 
 def send_brevo_email(to_email, to_name, subject, html_content):
     configuration = sib_api_v3_sdk.Configuration()
@@ -902,15 +924,16 @@ def admin_add_clip():
             yt_video_id = match.group(1)
 
     cur = mysql.connection.cursor()
-    # Insert into both top_clips and clips (clips is used by PDF)
+    # Admin-added clips are approved immediately (admin is trusted)
     cur.execute("""
-        INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id)
-        VALUES (%s,%s,%s,%s,%s,%s)
+        INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
+        VALUES (%s,%s,%s,%s,%s,%s,'approved')
     """, (campaign_id, clipper_name, platform, views, url, yt_video_id))
     cur.execute("""
-        INSERT INTO clips (campaign_id, clipper_name, platform, views, url, youtube_video_id)
-        VALUES (%s,%s,%s,%s,%s,%s)
+        INSERT INTO clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
+        VALUES (%s,%s,%s,%s,%s,%s,'approved')
     """, (campaign_id, clipper_name, platform, views, url, yt_video_id))
+    resync_campaign_views(cur, campaign_id)
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
@@ -939,8 +962,12 @@ def admin_delete_clip():
     data = request.get_json()
     clip_id = data.get('clip_id')
     cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM top_clips WHERE id=%s", (clip_id,))
+    crow = cur.fetchone()
     cur.execute("DELETE FROM top_clips WHERE id=%s", (clip_id,))
     cur.execute("DELETE FROM clips WHERE id=%s", (clip_id,))
+    if crow and crow.get('campaign_id'):
+        resync_campaign_views(cur, crow['campaign_id'])
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
@@ -981,10 +1008,8 @@ def admin_update_clip():
         WHERE campaign_id=%s AND clipper_name=%s AND platform=%s
     """, (clipper_name, platform, views, url, yt_video_id, row['campaign_id'], row['clipper_name'], row['platform']))
 
-    # Keep the campaign's total views in sync with the clip totals
-    cur.execute("SELECT SUM(views) as total FROM top_clips WHERE campaign_id=%s", (row['campaign_id'],))
-    total = int((cur.fetchone() or {}).get('total') or 0)
-    cur.execute("UPDATE campaigns SET current_views=%s WHERE campaign_id=%s", (total, row['campaign_id']))
+    # Keep the campaign total in sync (approved clips only)
+    resync_campaign_views(cur, row['campaign_id'])
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
@@ -1104,6 +1129,9 @@ def bot_submit_clip():
     platform     = data.get('platform', '').strip()      # TikTok / YouTube / Reels / Shorts
     views        = int(data.get('views', 0))
     url          = data.get('url', '').strip()
+    status       = (data.get('status') or 'pending').strip().lower()   # bot may submit pre-approved
+    if status not in ('pending', 'approved', 'rejected'):
+        status = 'pending'
 
     if not campaign_id or not clipper_name or not platform:
         return jsonify({'success': False, 'message': 'campaign_id, clipper_name, platform required'}), 400
@@ -1123,30 +1151,64 @@ def bot_submit_clip():
         cur.close()
         return jsonify({'success': False, 'message': 'Campaign not found'}), 404
 
-    # Insert clip into both tables
+    # Insert clip into both tables with its moderation status
     cur.execute("""
-        INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id)
-        VALUES (%s,%s,%s,%s,%s,%s)
-    """, (campaign_id, clipper_name, platform, views, url, yt_video_id))
+        INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+    """, (campaign_id, clipper_name, platform, views, url, yt_video_id, status))
     cur.execute("""
-        INSERT INTO clips (campaign_id, clipper_name, platform, views, url, youtube_video_id)
-        VALUES (%s,%s,%s,%s,%s,%s)
-    """, (campaign_id, clipper_name, platform, views, url, yt_video_id))
+        INSERT INTO clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+    """, (campaign_id, clipper_name, platform, views, url, yt_video_id, status))
 
-    # Auto-sync campaign total views from sum of all clips
-    cur.execute("SELECT SUM(views) as total FROM top_clips WHERE campaign_id=%s", (campaign_id,))
-    result = cur.fetchone()
-    total_views = int(result['total'] or 0)
-    cur.execute("UPDATE campaigns SET current_views=%s WHERE campaign_id=%s", (total_views, campaign_id))
-    cur.execute("INSERT INTO views_history (campaign_id, views) VALUES (%s,%s)", (campaign_id, total_views))
-    cur.execute("SELECT target_views FROM campaigns WHERE campaign_id=%s", (campaign_id,))
-    trow = cur.fetchone()
-    if trow:
-        check_and_send_milestone_email(campaign_id, total_views, trow['target_views'], cur)
+    # Only APPROVED clips count toward the campaign total / graph (pending submits don't move it)
+    total_views = resync_campaign_views(cur, campaign_id)
 
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True, 'total_views': total_views})
+
+
+@app.route('/api/bot/set-clip-status', methods=['POST'])
+def bot_set_clip_status():
+    """Discord bot calls this when an admin approves/rejects a clip.
+    Only approved clips count toward views, so this re-syncs the campaign total."""
+    if not bot_auth():
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    campaign_id = (data.get('campaign_id') or '').strip()
+    url         = (data.get('url') or '').strip()
+    status      = (data.get('status') or '').strip().lower()
+    reason      = data.get('reject_reason')
+
+    if status not in ('pending', 'approved', 'rejected'):
+        return jsonify({'success': False, 'message': 'status must be pending/approved/rejected'}), 400
+    if not url:
+        return jsonify({'success': False, 'message': 'url required'}), 400
+
+    cur = mysql.connection.cursor()
+    if campaign_id:
+        cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s WHERE campaign_id=%s AND url=%s",
+                    (status, reason, campaign_id, url))
+        cur.execute("UPDATE clips SET status=%s, reject_reason=%s WHERE campaign_id=%s AND url=%s",
+                    (status, reason, campaign_id, url))
+    else:
+        cur.execute("UPDATE top_clips SET status=%s, reject_reason=%s WHERE url=%s", (status, reason, url))
+        cur.execute("UPDATE clips SET status=%s, reject_reason=%s WHERE url=%s", (status, reason, url))
+
+    # Re-sync every campaign this URL belongs to
+    cur.execute("SELECT DISTINCT campaign_id FROM top_clips WHERE url=%s", (url,))
+    cids = [r['campaign_id'] for r in cur.fetchall()]
+    if campaign_id and campaign_id not in cids:
+        cids.append(campaign_id)
+    total = 0
+    for cid in cids:
+        total = resync_campaign_views(cur, cid)
+
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True, 'total_views': total})
 
 
 @app.route('/api/bot/update-views', methods=['POST'])
@@ -1183,17 +1245,9 @@ def bot_update_views():
         for row in cur.fetchall():
             affected_campaigns.add(row['campaign_id'])
 
-    # Re-sync totals for every affected campaign
+    # Re-sync totals for every affected campaign (approved clips only)
     for cid in affected_campaigns:
-        cur.execute("SELECT SUM(views) as total FROM top_clips WHERE campaign_id=%s", (cid,))
-        result = cur.fetchone()
-        total_views = int(result['total'] or 0)
-        cur.execute("UPDATE campaigns SET current_views=%s WHERE campaign_id=%s", (total_views, cid))
-        cur.execute("INSERT INTO views_history (campaign_id, views) VALUES (%s,%s)", (cid, total_views))
-        cur.execute("SELECT target_views FROM campaigns WHERE campaign_id=%s", (cid,))
-        trow = cur.fetchone()
-        if trow:
-            check_and_send_milestone_email(cid, total_views, trow['target_views'], cur)
+        resync_campaign_views(cur, cid)
 
     mysql.connection.commit()
     cur.close()
@@ -1307,7 +1361,7 @@ def dashboard_top_clips():
         return jsonify({'success': True, 'clips': []})
     cur.execute("""
         SELECT clipper_name, platform, views, url
-        FROM top_clips WHERE campaign_id=%s AND views>=10000
+        FROM top_clips WHERE campaign_id=%s AND status='approved' AND views>=10000
         ORDER BY views DESC
     """, (user['campaign_id'],))
     clips = cur.fetchall()
@@ -1326,7 +1380,7 @@ def dashboard_leaderboard():
         return jsonify({'success': True, 'leaderboard': []})
     cur.execute("""
         SELECT clipper_name, platform, views
-        FROM top_clips WHERE campaign_id=%s
+        FROM top_clips WHERE campaign_id=%s AND status='approved'
         ORDER BY views DESC LIMIT 10
     """, (user['campaign_id'],))
     rows = cur.fetchall()
@@ -1345,12 +1399,51 @@ def dashboard_platform_breakdown():
         return jsonify({'success': True, 'breakdown': []})
     cur.execute("""
         SELECT platform, SUM(views) as total_views, COUNT(*) as clip_count
-        FROM top_clips WHERE campaign_id=%s
+        FROM top_clips WHERE campaign_id=%s AND status='approved'
         GROUP BY platform ORDER BY total_views DESC
     """, (user['campaign_id'],))
     rows = cur.fetchall()
     cur.close()
     return jsonify({'success': True, 'breakdown': rows})
+
+@app.route('/api/dashboard/clips')
+def dashboard_all_clips():
+    """Every clip for the logged-in client's campaign (any status) + summary counts."""
+    if 'user_email' not in session:
+        return jsonify({'success': False}), 401
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM users WHERE email=%s", (session['user_email'],))
+    user = cur.fetchone()
+    empty = {'total': 0, 'approved': 0, 'pending': 0, 'rejected': 0, 'approved_views': 0}
+    if not user or not user['campaign_id']:
+        cur.close()
+        return jsonify({'success': True, 'clips': [], 'summary': empty})
+    cid = user['campaign_id']
+    cur.execute("""
+        SELECT id, clipper_name, platform, views, url, status, added_at
+        FROM top_clips WHERE campaign_id=%s ORDER BY added_at DESC
+    """, (cid,))
+    clips = cur.fetchall()
+    for c in clips:
+        c['added_at'] = str(c['added_at'])
+    cur.execute("""
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(status='approved'),0) AS approved,
+               COALESCE(SUM(status='pending'),0)  AS pending,
+               COALESCE(SUM(status='rejected'),0) AS rejected,
+               COALESCE(SUM(CASE WHEN status='approved' THEN views ELSE 0 END),0) AS approved_views
+        FROM top_clips WHERE campaign_id=%s
+    """, (cid,))
+    s = cur.fetchone() or {}
+    cur.close()
+    summary = {
+        'total': int(s.get('total') or 0),
+        'approved': int(s.get('approved') or 0),
+        'pending': int(s.get('pending') or 0),
+        'rejected': int(s.get('rejected') or 0),
+        'approved_views': int(s.get('approved_views') or 0),
+    }
+    return jsonify({'success': True, 'clips': clips, 'summary': summary})
 
 @app.route('/api/dashboard/weekly-milestones')
 def dashboard_weekly_milestones():
