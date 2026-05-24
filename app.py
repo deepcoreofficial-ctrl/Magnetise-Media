@@ -734,7 +734,7 @@ def admin_login():
             session['admin_logged_in'] = True
             session['admin_email'] = ADMIN_EMAIL
             session['admin_role'] = 'super'
-            session['admin_name'] = (srow.get('name') if srow else None) or 'Super Admin'
+            session['admin_name'] = (srow.get('name') if srow else None) or 'Admin'
             session.pop('acting_as_email', None); session.pop('acting_as_name', None)
             return jsonify({'success': True})
         return jsonify({'success': False, 'message': 'Invalid credentials'})
@@ -1434,8 +1434,12 @@ def admin_impersonate_admin():
     """Super admin 'view as' a manager."""
     if not is_super():
         return jsonify({'success': False}), 403
+    data = request.get_json()
     cur = mysql.connection.cursor()
-    cur.execute("SELECT name, email, role FROM admins WHERE id=%s", (request.get_json().get('id'),))
+    if data.get('email'):
+        cur.execute("SELECT name, email, role FROM admins WHERE email=%s", (data.get('email'),))
+    else:
+        cur.execute("SELECT name, email, role FROM admins WHERE id=%s", (data.get('id'),))
     row = cur.fetchone()
     cur.close()
     if not row or row['role'] == 'super':
@@ -1460,38 +1464,43 @@ def admin_stop_impersonate_admin():
 def admin_sync_list():
     if not is_super():
         return jsonify({'success': False}), 403
-    cur = mysql.connection.cursor()
-    cur.execute("""
-        SELECT d.slug, d.display_name, d.created_at, d.sync_status, d.website_campaign_id, d.synced_at,
-               c.campaign_name AS website_campaign_name, c.assigned_admin_email
-        FROM discord_campaigns d
-        LEFT JOIN campaigns c ON d.website_campaign_id = c.campaign_id
-        ORDER BY d.received_at DESC
-    """)
-    rows = cur.fetchall()
-    for r in rows:
-        r['created_at'] = str(r['created_at']) if r.get('created_at') else None
-        r['synced_at'] = str(r['synced_at']) if r.get('synced_at') else None
-    # website campaigns available to map (active + not already mapped)
-    cur.execute("""
-        SELECT campaign_id, campaign_name FROM campaigns
-        WHERE status='ACTIVE' AND campaign_id NOT IN (
-            SELECT website_campaign_id FROM discord_campaigns
-            WHERE website_campaign_id IS NOT NULL AND sync_status='approved'
-        )
-        ORDER BY created_at DESC
-    """)
-    available = cur.fetchall()
-    cur.execute("SELECT name, email FROM admins WHERE role!='super' ORDER BY name")
-    managers = cur.fetchall()
-    cur.close()
-    return jsonify({
-        'success': True,
-        'pending':  [r for r in rows if r['sync_status'] == 'pending'],
-        'approved': [r for r in rows if r['sync_status'] == 'approved'],
-        'available_campaigns': available,
-        'managers': managers,
-    })
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("""
+            SELECT d.slug, d.display_name, d.created_at, d.sync_status, d.website_campaign_id, d.synced_at,
+                   c.campaign_name AS website_campaign_name, c.assigned_admin_email
+            FROM discord_campaigns d
+            LEFT JOIN campaigns c ON d.website_campaign_id = c.campaign_id
+            ORDER BY d.received_at DESC
+        """)
+        rows = cur.fetchall()
+        for r in rows:
+            r['created_at'] = str(r['created_at']) if r.get('created_at') else None
+            r['synced_at'] = str(r['synced_at']) if r.get('synced_at') else None
+        cur.execute("""
+            SELECT campaign_id, campaign_name FROM campaigns
+            WHERE status='ACTIVE' AND campaign_id NOT IN (
+                SELECT website_campaign_id FROM discord_campaigns
+                WHERE website_campaign_id IS NOT NULL AND sync_status='approved'
+            )
+            ORDER BY created_at DESC
+        """)
+        available = cur.fetchall()
+        cur.execute("SELECT name, email FROM admins WHERE role!='super' ORDER BY email")
+        managers = cur.fetchall()
+        cur.close()
+        return jsonify({
+            'success': True,
+            'pending':  [r for r in rows if r['sync_status'] == 'pending'],
+            'approved': [r for r in rows if r['sync_status'] == 'approved'],
+            'available_campaigns': available,
+            'managers': managers,
+        })
+    except Exception as e:
+        try: cur.close()
+        except Exception: pass
+        return jsonify({'success': True, 'pending': [], 'approved': [],
+                        'available_campaigns': [], 'managers': [], 'note': str(e)})
 
 @app.route('/api/admin/sync/approve', methods=['POST'])
 def admin_sync_approve():
@@ -1540,14 +1549,17 @@ def admin_appeals_list():
     if not session.get('admin_logged_in'):
         return jsonify({'success': False}), 401
     a = eff_admin()
-    cur = mysql.connection.cursor()
-    base = "SELECT ap.*, c.campaign_name FROM appeals ap LEFT JOIN campaigns c ON ap.campaign_id=c.campaign_id "
-    if a['role'] == 'super':
-        cur.execute(base + "ORDER BY ap.created_at DESC")
-    else:
-        cur.execute(base + "WHERE c.assigned_admin_email=%s ORDER BY ap.created_at DESC", (a['email'],))
-    rows = cur.fetchall()
-    cur.close()
+    try:
+        cur = mysql.connection.cursor()
+        base = "SELECT ap.*, c.campaign_name FROM appeals ap LEFT JOIN campaigns c ON ap.campaign_id=c.campaign_id "
+        if a['role'] == 'super':
+            cur.execute(base + "ORDER BY ap.created_at DESC")
+        else:
+            cur.execute(base + "WHERE c.assigned_admin_email=%s ORDER BY ap.created_at DESC", (a['email'],))
+        rows = cur.fetchall()
+        cur.close()
+    except Exception:
+        return jsonify({'success': True, 'appeals': []})
     now = datetime.now()
     out = []
     for r in rows:
@@ -1636,10 +1648,13 @@ def admin_permit_request():
 def admin_permits_list():
     if not is_super():
         return jsonify({'success': False}), 403
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT p.*, c.campaign_name FROM permits p LEFT JOIN campaigns c ON p.campaign_id=c.campaign_id ORDER BY p.created_at DESC")
-    rows = cur.fetchall()
-    cur.close()
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT p.*, c.campaign_name FROM permits p LEFT JOIN campaigns c ON p.campaign_id=c.campaign_id ORDER BY p.created_at DESC")
+        rows = cur.fetchall()
+        cur.close()
+    except Exception:
+        return jsonify({'success': True, 'permits': []})
     for r in rows:
         r['created_at'] = str(r['created_at']) if r.get('created_at') else None
         r['resolved_at'] = str(r['resolved_at']) if r.get('resolved_at') else None

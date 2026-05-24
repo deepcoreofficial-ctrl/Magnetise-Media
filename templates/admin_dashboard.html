@@ -630,7 +630,7 @@
         .admin-main.full{margin-left:0;}
         .admin-page{display:none;padding:28px 28px 60px;max-width:1200px;}
         .admin-page.active{display:block;}
-        .admin-page-head{margin-bottom:22px;}
+        .admin-page-head{margin-bottom:22px;text-align:center;}
         .admin-page-head h1{font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.4px;}
         .admin-page-head p{color:var(--muted);font-size:13px;margin-top:3px;}
         .toggle-btn{position:fixed;top:14px;left:250px;z-index:300;width:34px;height:34px;background:#1a1a1a;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#888;transition:left .3s ease;}
@@ -750,9 +750,21 @@
             </table>
         </div></div>
     </div>
-    <div class="admin-page" id="page-allcampaigns"><div class="admin-page-head"><h1>All Campaigns</h1><p>Every campaign with inspect (view as client / manager)</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>The full campaign list + Inspect lands here.</p></div></div>
-    <div class="admin-page" id="page-mycampaigns"><div class="admin-page-head"><h1>My Campaigns</h1><p>Campaigns assigned to you</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Your assigned campaign dashboards land here.</p></div></div>
-    <div class="admin-page" id="page-inspect"><div class="admin-page-head"><h1>Inspect Campaign</h1><p>Pick one of your running campaigns to view stats &amp; act</p></div><div class="shell-empty"><h3>Coming next phase</h3><p>Campaign picker + stats land here.</p></div></div>
+    <div class="admin-page" id="page-allcampaigns">
+        <div class="admin-page-head"><h1>All Campaigns</h1><p>Every campaign — inspect as the client or the assigned manager</p></div>
+        <div id="allCampaignsContent"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="admin-page" id="page-mycampaigns">
+        <div class="admin-page-head"><h1>My Campaigns</h1><p>Campaigns assigned to you</p></div>
+        <div id="myCampaignsContent"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="admin-page" id="page-inspect">
+        <div class="admin-page-head"><h1>Inspect Campaign</h1><p>Pick one of your campaigns to view its stats &amp; act</p></div>
+        <div style="max-width:520px;margin:0 auto 18px;">
+            <select id="inspectSelect" class="field" onchange="inspectShow(this.value)" style="width:100%;"></select>
+        </div>
+        <div id="inspectStats"></div>
+    </div>
     <div class="admin-page" id="page-appeals">
         <div class="admin-page-head"><h1>Appeals</h1><p>Client clip disputes awaiting your decision (48h window)</p></div>
         <div class="table-card"><div class="table-wrap"><table>
@@ -1212,6 +1224,9 @@ function showPage(name, el){
     if(name==='sync') loadSync();
     if(name==='appeals') loadAppeals();
     if(name==='permits') loadPermits();
+    if(name==='mycampaigns') loadMyCampaigns();
+    if(name==='allcampaigns') loadAllCampaignsPage();
+    if(name==='inspect') loadInspect();
 }
 
 // Phase 2 will scope sections per role using the admin's role from /api/admin/check.
@@ -1223,7 +1238,7 @@ function applyRoleVisibility(role){
         ['nav-signups','nav-sync','nav-allcampaigns','nav-permits','nav-roles']
             .forEach(id=>{const e=document.getElementById(id); if(e) e.style.display='none';});
     } else {
-        if(pill) pill.textContent='SUPER ADMIN';
+        if(pill) pill.textContent='ADMIN';
     }
 }
 
@@ -1516,8 +1531,67 @@ function reportUpload(e){
 }
 async function aRequestEnd(uid){
     const c=C(uid); if(!c.campaign_id)return;
-    if(!confirm('Request the super admin to end this campaign?'))return;
+    if(!confirm('Request the admin to end this campaign?'))return;
     try{const res=await fetch('/api/admin/permits/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign_id:c.campaign_id,action:'complete_campaign',note:'Requested from client list'})});const data=await res.json();if(data.success)showToast('Permit requested.');else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
+}
+
+// ---- My Campaigns / All Campaigns / Inspect ----
+function campaignCard(c){
+    const cv=Number(c.current_views||0), tv=Number(c.target_views||0);
+    const pct=tv?Math.min(Math.round(cv/tv*100),100):0;
+    const sm={ACTIVE:['status-active','Active'],COMPLETED:['status-completed','Completed']}[(c.campaign_status||'').toUpperCase()]||['status-active',c.campaign_status||'—'];
+    return `<div class="table-card" style="padding:18px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+            <div><div style="font-weight:700;color:#fff;">${esc(c.campaign_name||'—')}</div><div class="td-muted" style="font-size:12px;">${esc(c.full_name||'')} · ${esc(c.email||'')}</div></div>
+            <span class="status ${sm[0]}"><span class="status-dot"></span>${sm[1]}</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-bottom:6px;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#aaa,#fff);"></div></div>
+        <div class="td-muted" style="font-size:12px;margin-bottom:12px;">${cv.toLocaleString()} / ${tv.toLocaleString()} views · ${pct}% · $${Number(c.budget_total||0).toLocaleString()}</div>
+        <div class="action-btns">
+            <button class="btn-sm btn-view" onclick="aUpdateViews('${esc(c.user_id)}')">Update Views</button>
+            <button class="btn-sm" onclick="aEditCampaign('${esc(c.user_id)}')">Edit Campaign</button>
+            <button class="btn-sm" onclick="aClips('${esc(c.user_id)}')">Clips</button>
+            <button class="btn-sm btn-view" onclick="aViewAs('${esc(c.user_id)}')">View as client</button>
+        </div>
+    </div>`;
+}
+async function _fetchClientsInto(){
+    const res=await fetch('/api/admin/clients');const data=await res.json();
+    const clients=(data.clients||[]).filter(c=>c.campaign_id);
+    clients.forEach(c=>{_clientsById[c.user_id]={..._clientsById[c.user_id],...c};});
+    return clients;
+}
+async function loadMyCampaigns(){
+    const el=document.getElementById('myCampaignsContent');if(!el)return;
+    try{const clients=await _fetchClientsInto();
+        el.innerHTML=clients.length?clients.map(campaignCard).join(''):'<div class="shell-empty"><p>No campaigns assigned to you yet.</p></div>';
+    }catch{el.innerHTML='<div class="shell-empty"><p>Error loading.</p></div>';}
+}
+async function loadAllCampaignsPage(){
+    const el=document.getElementById('allCampaignsContent');if(!el)return;
+    try{const clients=await _fetchClientsInto();
+        if(!clients.length){el.innerHTML='<div class="shell-empty"><p>No campaigns yet.</p></div>';return;}
+        el.innerHTML='<div class="table-card"><div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Client</th><th>Status</th><th>Assigned</th><th>Inspect</th></tr></thead><tbody>'+clients.map(c=>{
+            const sm={ACTIVE:['status-active','Active'],COMPLETED:['status-completed','Completed']}[(c.campaign_status||'').toUpperCase()]||['status-active',c.campaign_status||'—'];
+            return `<tr><td><strong>${esc(c.campaign_name||'—')}</strong></td><td class="td-email">${esc(c.email||'')}</td><td><span class="status ${sm[0]}"><span class="status-dot"></span>${sm[1]}</span></td><td class="td-muted">${esc(c.assigned_admin_email||'Admin')}</td><td><div class="action-btns"><button class="btn-sm btn-view" onclick="aViewAs('${esc(c.user_id)}')">As client</button>${c.assigned_admin_email?`<button class="btn-sm" onclick="viewAsManagerEmail('${esc(c.assigned_admin_email)}')">As manager</button>`:''}</div></td></tr>`;
+        }).join('')+'</tbody></table></div></div>';
+    }catch{el.innerHTML='<div class="shell-empty"><p>Error loading.</p></div>';}
+}
+async function viewAsManagerEmail(email){
+    if(!confirm('View the panel as '+email+'?'))return;
+    try{const res=await fetch('/api/admin/impersonate-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const data=await res.json();if(data.success)window.location.href=data.redirect||'/admin/dashboard';else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
+}
+async function loadInspect(){
+    const sel=document.getElementById('inspectSelect'),stats=document.getElementById('inspectStats');if(!sel)return;
+    stats.innerHTML='';
+    try{const clients=await _fetchClientsInto();
+        if(!clients.length){sel.innerHTML='<option value="">No campaigns</option>';stats.innerHTML='<div class="shell-empty"><p>No campaigns assigned to you.</p></div>';return;}
+        sel.innerHTML='<option value="">— pick a campaign —</option>'+clients.map(c=>`<option value="${esc(c.user_id)}">${esc(c.campaign_name||c.campaign_id)} (${esc(c.full_name||'')})</option>`).join('');
+    }catch{stats.innerHTML='<div class="shell-empty"><p>Error loading.</p></div>';}
+}
+function inspectShow(uid){
+    const stats=document.getElementById('inspectStats');
+    stats.innerHTML=uid?campaignCard(C(uid)):'';
 }
 
 async function loadData() { loadPending(); loadAllClients(); loadStats(); }
