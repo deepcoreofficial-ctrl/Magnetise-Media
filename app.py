@@ -1744,16 +1744,21 @@ def admin_change_own_password():
         return jsonify({'success': False, 'message': 'Password must be at least 8 characters'}), 400
     email = session.get('admin_email')                 # real logged-in admin
     role = session.get('admin_role', 'super')
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
-    if cur.fetchone():
-        cur.execute("UPDATE admins SET password_hash=%s WHERE email=%s", (pbkdf2_sha256.hash(new_password), email))
-    else:
-        cur.execute("INSERT INTO admins (name, email, password_hash, role) VALUES (%s,%s,%s,%s)",
-                    (session.get('admin_name') or 'Admin', email, pbkdf2_sha256.hash(new_password), role))
-    mysql.connection.commit()
-    cur.close()
-    return jsonify({'success': True})
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+        if cur.fetchone():
+            cur.execute("UPDATE admins SET password_hash=%s WHERE email=%s", (pbkdf2_sha256.hash(new_password), email))
+        else:
+            cur.execute("INSERT INTO admins (name, email, password_hash, role) VALUES (%s,%s,%s,%s)",
+                        (session.get('admin_name') or 'Admin', email, pbkdf2_sha256.hash(new_password), role))
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        try: cur.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': f'Could not save: {e}'}), 400
 
 @app.route('/api/admin/me/profile-pic', methods=['POST'])
 def admin_set_own_pic():
