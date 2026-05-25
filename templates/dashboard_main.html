@@ -458,7 +458,8 @@
                     </div>
                     <input type="file" id="pfpInput" accept="image/*" style="display:none;" onchange="handleProfilePicChange(event)">
                     <div class="profile-meta">
-                        <h2 id="profileName">—</h2>
+                        <h2 id="profileName" style="display:inline-block;vertical-align:middle;">—</h2>
+                        <button onclick="editClientName()" title="Edit name" style="background:none;border:none;color:#666;cursor:pointer;font-size:12px;margin-left:8px;vertical-align:middle;">Edit</button>
                         <p id="profileEmail" style="color:#555;font-size:13px;">—</p>
                     </div>
                 </div>
@@ -511,7 +512,7 @@
                 <div class="faq-item"><div class="faq-q">When does the views graph update?</div><div class="faq-a">Your views graph updates every time our team logs new data for your campaign. We update regularly during active campaigns.</div></div>
                 <div class="faq-item"><div class="faq-q">When do top clips appear?</div><div class="faq-a">Only clips with 10,000+ views are shown. They appear automatically once they cross that threshold.</div></div>
                 <div class="faq-item"><div class="faq-q">I forgot my password — what do I do?</div><div class="faq-a">Go to the login page and click "Forgot password?" — You can securely reset your password instantly using email verification.</div></div>
-                <div class="faq-item"><div class="faq-q">How does the refund policy work?</div><div class="faq-a">20% of your budget is a non-refundable operations fee. The remaining 80% is your view guarantee — if views are not delivered after 30 days, you are eligible for a refund on undelivered views.</div></div>
+                <div class="faq-item"><div class="faq-q">How does the refund policy work?</div><div class="faq-a">30% of your budget is a non-refundable operations fee. The remaining 70% is your view guarantee — if views are not delivered after 30 days, you are eligible for a refund on undelivered views.</div></div>
                 <div class="faq-item"><div class="faq-q">My views seem incorrect?</div><div class="faq-a">Contact us at magnetisemedia.co@gmail.com with your Campaign ID and we will investigate right away.</div></div>
                 <div class="faq-item" style="border-bottom:none;"><div class="faq-q">How long do clips stay live?</div><div class="faq-a">Clips remain live for a minimum of 2 months after campaign completion, continuing to accumulate organic views during this period.</div></div>
             </div>
@@ -627,7 +628,7 @@ function renderDashboard(d){
     const cv=d.current_views||0,tv=d.target_views||1;
     const pct=Math.min(Math.round((cv/tv)*100),100);
     const budget=Number(d.budget_total||0);
-    const opsFee=Math.round(budget*0.20);
+    const opsFee=Math.round(budget*0.30);
     const viewBudget=budget-opsFee;
     const cs=getCampaignStatus(d);
     const elapsed=daysElapsed(d.start_date);
@@ -778,8 +779,8 @@ function renderDashboard(d){
                 <div class="section-title">Budget Transparency</div>
                 <div class="info-row"><span class="info-key">Total Budget</span><span class="info-val">$${budget.toLocaleString()}</span></div>
                 <div class="budget-breakdown">
-                    <div class="budget-part"><div class="budget-part-label">Ops Fee (20%)</div><div class="budget-part-val" style="color:#fff;">$${opsFee.toLocaleString()}</div><div class="budget-part-sub">Non-refundable</div></div>
-                    <div class="budget-part"><div class="budget-part-label">View Guarantee (80%)</div><div class="budget-part-val" style="color:#00cc6a;">$${viewBudget.toLocaleString()}</div><div class="budget-part-sub">Refundable if undelivered</div></div>
+                    <div class="budget-part"><div class="budget-part-label">Ops Fee (30%)</div><div class="budget-part-val" style="color:#fff;">$${opsFee.toLocaleString()}</div><div class="budget-part-sub">Non-refundable</div></div>
+                    <div class="budget-part"><div class="budget-part-label">View Guarantee (70%)</div><div class="budget-part-val" style="color:#00cc6a;">$${viewBudget.toLocaleString()}</div><div class="budget-part-sub">Refundable if undelivered</div></div>
                 </div>
                 <div class="info-row" style="margin-top:12px;"><span class="info-key">Views Delivered</span><span class="info-val">${Number(cv).toLocaleString()}</span></div>
                 <div class="info-row"><span class="info-key">Views Remaining</span><span class="info-val">${Math.max(0,tv-cv).toLocaleString()}</span></div>
@@ -832,8 +833,8 @@ async function openCampaignAnalyticsModal(){
             <div id="accNoGraph" style="display:none;text-align:center;padding:20px;color:#555;font-size:13px;">No history data yet.</div>
         </div>
         <div class="info-row"><span class="info-key">Budget</span><span class="info-val">$${budget.toLocaleString()}</span></div>
-        <div class="info-row"><span class="info-key">Ops Fee (20%)</span><span class="info-val" style="color:#fff;">$${Math.round(budget*0.20).toLocaleString()}</span></div>
-        <div class="info-row"><span class="info-key">View Guarantee (80%)</span><span class="info-val" style="color:#00cc6a;">$${Math.round(budget*0.80).toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">Ops Fee (30%)</span><span class="info-val" style="color:#fff;">$${Math.round(budget*0.30).toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-key">View Guarantee (70%)</span><span class="info-val" style="color:#00cc6a;">$${Math.round(budget*0.70).toLocaleString()}</span></div>
         <div class="info-row"><span class="info-key">Status</span><span class="info-val">${cs}</span></div>
         <div class="info-row"><span class="info-key">Start Date</span><span class="info-val">${esc(d.start_date||'—')}</span></div>
         <div class="info-row" style="border-bottom:none;"><span class="info-key">End Date</span><span class="info-val">${esc(d.expected_end_date||'---')}</span></div>
@@ -1263,6 +1264,22 @@ async function renderAnalytics(d){
         }catch(e){}
 
     }
+
+async function editClientName(){
+    const cur=(_dashData&&_dashData.full_name)||'';
+    const name=(prompt('Your name:', cur)||'').trim();
+    if(!name||name===cur)return;
+    try{
+        const res=await fetch('/api/dashboard/update-name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+        const data=await res.json();
+        if(data.success){
+            if(_dashData)_dashData.full_name=name;
+            document.getElementById('profileName').textContent=name;
+            document.getElementById('sbName').textContent=name;
+            applyAvatars(_dashData||{full_name:name});
+        } else alert(data.message||'Could not update name.');
+    }catch(e){alert('Connection error.');}
+}
 
 function fillAccount(d){
     applyAvatars(d);

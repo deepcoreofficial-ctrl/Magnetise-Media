@@ -819,6 +819,9 @@
                     <input type="file" id="adminPfpInput" accept="image/*" style="display:none;" onchange="handleAdminPfp(event)">
                     <div style="min-width:0;"><div id="settingsName" style="font-weight:700;color:#fff;"></div><div id="settingsEmail" style="color:var(--muted);font-size:13px;"></div></div>
                 </div>
+                <div class="field"><label>Display Name</label>
+                    <div style="display:flex;gap:8px;"><input type="text" id="ownNameInput" style="flex:1;"/><button class="btn-regen" onclick="changeOwnName()">Save Name</button></div>
+                </div>
                 <div class="field"><label>New Password</label><input type="password" id="ownNewPw" placeholder="Min 8 characters"/></div>
                 <div class="field"><label>Confirm Password</label><input type="password" id="ownNewPw2" placeholder="Re-enter new password"/></div>
                 <div id="ownPwMsg" class="msg-box"></div>
@@ -1342,7 +1345,16 @@ async function openAdminProfile(id){
 function fillSettings(){
     document.getElementById('settingsName').textContent=_me.name||'Admin';
     document.getElementById('settingsEmail').textContent=_me.email||'';
+    const ni=document.getElementById('ownNameInput'); if(ni) ni.value=_me.name||'';
     applyAdminAvatar(_me);
+}
+async function changeOwnName(){
+    const name=document.getElementById('ownNameInput').value.trim();
+    if(!name){showToast('Enter a name','error');return;}
+    try{const res=await fetch('/api/admin/me/set-name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});const data=await res.json();
+        if(data.success){_me.name=name;document.getElementById('settingsName').textContent=name;const nd=document.getElementById('adminNameDisplay');if(nd)nd.textContent=name;applyAdminAvatar(_me);showToast('Name updated.');}
+        else showToast(data.message||'Error','error');
+    }catch{showToast('Connection error','error');}
 }
 async function changeOwnPassword(){
     const pw=document.getElementById('ownNewPw').value.trim();const pw2=document.getElementById('ownNewPw2').value.trim();const msg=document.getElementById('ownPwMsg');
@@ -1548,7 +1560,6 @@ function campaignCard(c){
         <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-bottom:6px;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#aaa,#fff);"></div></div>
         <div class="td-muted" style="font-size:12px;margin-bottom:12px;">${cv.toLocaleString()} / ${tv.toLocaleString()} views · ${pct}% · $${Number(c.budget_total||0).toLocaleString()}</div>
         <div class="action-btns">
-            <button class="btn-sm btn-view" onclick="aUpdateViews('${esc(c.user_id)}')">Update Views</button>
             <button class="btn-sm" onclick="aEditCampaign('${esc(c.user_id)}')">Edit Campaign</button>
             <button class="btn-sm" onclick="aClips('${esc(c.user_id)}')">Clips</button>
             <button class="btn-sm btn-view" onclick="aViewAs('${esc(c.user_id)}')">View as client</button>
@@ -1659,7 +1670,6 @@ async function loadAllClients() {
                 actions = `<button class="btn-sm" onclick="aReactivate('${uid}')">Reactivate</button>`;
             } else if (st === 'ACTIVE') {
                 actions = `
-                    <button class="btn-sm btn-view" onclick="aUpdateViews('${uid}')">Update Views</button>
                     <button class="btn-sm" onclick="aEditCampaign('${uid}')">Edit Campaign</button>
                     <button class="btn-sm btn-view" onclick="aSetCpm('${uid}')">Set Pay Rate</button>
                     <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>
@@ -2030,7 +2040,7 @@ function openDetails(c){
     const cv = Number(c.current_views||0), tv = Number(c.target_views||0);
     const pct = tv ? Math.min(Math.round((cv/tv)*100),100) : 0;
     const budget = Number(c.budget_total||0);
-    const ops = Math.round(budget*0.20), guarantee = budget - ops;
+    const ops = Math.round(budget*0.30), guarantee = budget - ops;
     const cpm = c.cpm_rate ? '$'+Number(c.cpm_rate).toFixed(2) : 'Not set';
     const sm = {ACTIVE:['status-active','Active'],PENDING:['status-pending','Pending'],REJECTED:['status-rejected','Rejected'],COMPLETED:['status-completed','Completed']}[(c.account_status||'').toUpperCase()] || ['status-pending', c.account_status||'—'];
     document.getElementById('detailsTitle').textContent = c.full_name || 'Client';
@@ -2047,8 +2057,8 @@ function openDetails(c){
             <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin:10px 0 14px;"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#aaa,#fff);border-radius:3px;"></div></div>
             <div class="dv-row"><span>Progress</span><b>${pct}%</b></div>
             <div class="dv-row"><span>Total Budget</span><b>$${budget.toLocaleString()}</b></div>
-            <div class="dv-row"><span>Ops Fee (20%)</span><b style="color:#fff;">$${ops.toLocaleString()}</b></div>
-            <div class="dv-row"><span>View Guarantee (80%)</span><b style="color:#00cc6a;">$${guarantee.toLocaleString()}</b></div>
+            <div class="dv-row"><span>Ops Fee (30%)</span><b style="color:#fff;">$${ops.toLocaleString()}</b></div>
+            <div class="dv-row"><span>View Guarantee (70%)</span><b style="color:#00cc6a;">$${guarantee.toLocaleString()}</b></div>
             <div class="dv-row"><span>CPM (Cost / 1k)</span><b>${cpm}</b></div>
             <div class="dv-row"><span>Start</span><b>${esc((c.start_date||'—').slice(0,10))}</b></div>
             <div class="dv-row"><span>Expected End</span><b>${esc((c.expected_end_date||'—').slice(0,10))}</b></div>

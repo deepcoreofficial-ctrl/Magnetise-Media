@@ -1762,6 +1762,26 @@ def admin_set_own_pic():
     cur.close()
     return jsonify({'success': True})
 
+@app.route('/api/admin/me/set-name', methods=['POST'])
+def admin_set_own_name():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    name = (request.get_json().get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'message': 'Name required'}), 400
+    email = session.get('admin_email')
+    role = session.get('admin_role', 'super')
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+    if cur.fetchone():
+        cur.execute("UPDATE admins SET name=%s WHERE email=%s", (name, email))
+    else:
+        cur.execute("INSERT INTO admins (name, email, role) VALUES (%s,%s,%s)", (name, email, role))
+    mysql.connection.commit()
+    cur.close()
+    session['admin_name'] = name
+    return jsonify({'success': True})
+
 # ==========================================
 # BOT API — Discord bot calls these routes
 # Auth: X-Bot-Secret header must match BOT_SECRET_KEY in .env
@@ -2129,6 +2149,20 @@ def update_profile_pic():
     cur.close()
     return jsonify({'success': True})
 
+@app.route('/api/dashboard/update-name', methods=['POST'])
+def dashboard_update_name():
+    """Client changes their own display name."""
+    if 'user_email' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+    name = (request.get_json().get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'message': 'Name required'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE users SET full_name=%s WHERE email=%s", (name[:255], session['user_email']))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
 @app.route('/api/dashboard/top-clips')
 def dashboard_top_clips():
     if 'user_email' not in session:
@@ -2471,12 +2505,12 @@ def dashboard_report():
     story.append(t)
 
     story.append(Paragraph('Budget Breakdown', h2_style))
-    ops_fee = round(budget * 0.20)
+    ops_fee = round(budget * 0.30)
     view_budget = budget - ops_fee
     bdata = [
         ['Total Budget', f"${budget:,.0f}"],
-        ['Operations Fee (20%)', f"${ops_fee:,.0f}"],
-        ['View Guarantee (80%)', f"${view_budget:,.0f}"],
+        ['Operations Fee (30%)', f"${ops_fee:,.0f}"],
+        ['View Guarantee (70%)', f"${view_budget:,.0f}"],
         ['Cost per 1,000 Views (CPM)', f"${d['cpm_rate']:.2f}" if d['cpm_rate'] else 'N/A'],
     ]
     bt = Table(bdata, colWidths=[120*mm, 50*mm])
@@ -2586,8 +2620,8 @@ def admin_invoice(campaign_id):
     story.append(HRFlowable(width="100%", thickness=1, color=DARK, spaceAfter=20))
 
     budget = float(d['budget_total'] or 0)
-    ops_fee = round(budget * 0.20, 2)
-    view_guarantee = round(budget * 0.80, 2)
+    ops_fee = round(budget * 0.30, 2)
+    view_guarantee = round(budget * 0.70, 2)
 
     # Invoice meta
     invoice_no = f"INV-{d['campaign_id']}"
@@ -2603,8 +2637,8 @@ def admin_invoice(campaign_id):
     story.append(Paragraph('Services', ParagraphStyle('H2', fontSize=13, fontName='Helvetica-Bold', spaceAfter=10)))
     items = [
         ['Description', 'Details', 'Amount'],
-        ['Campaign Management (Ops Fee 20%)', f"{d['campaign_name']}", f"${ops_fee:,.2f}"],
-        [f'View Guarantee (80%) — {d["target_views"]:,} views', f'{str(d["start_date"])} → {str(d["expected_end_date"])}', f"${view_guarantee:,.2f}"],
+        ['Campaign Management (Ops Fee 30%)', f"{d['campaign_name']}", f"${ops_fee:,.2f}"],
+        [f'View Guarantee (70%) — {d["target_views"]:,} views', f'{str(d["start_date"])} → {str(d["expected_end_date"])}', f"${view_guarantee:,.2f}"],
         ['', '', ''],
         ['TOTAL', '', f"${budget:,.2f}"],
     ]
