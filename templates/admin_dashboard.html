@@ -669,7 +669,7 @@
         <div class="sb-item" data-role="super" id="nav-sync" onclick="showPage('sync',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Campaigns-Clips Sync</div>
         <div class="sb-item" data-role="super" id="nav-allcampaigns" onclick="showPage('allcampaigns',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>All Campaigns</div>
         <div class="sb-item" data-role="all" id="nav-mycampaigns" onclick="showPage('mycampaigns',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>My Campaigns</div>
-        <div class="sb-item" data-role="manager" id="nav-inspect" onclick="showPage('inspect',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Inspect Campaign</div>
+        <div class="sb-item" data-role="super" id="nav-inspect" onclick="showPage('inspect',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Inspection</div>
         <div class="sb-item" data-role="all" id="nav-appeals" onclick="showPage('appeals',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Appeals</div>
         <div class="sb-item" data-role="super" id="nav-permits" onclick="showPage('permits',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c-1 0-3-1-3-3s2-3 3-3-1-3-3-3-3 2-3 3-1-3-3-3-3 2-3 3-3 1-3 3 2 3 3 3-2 3-3 3 1 3 3 3 3-2 3-3 1 3 3 3 3-2 3-3z"/></svg>Permits</div>
         <div class="sb-item" data-role="super" id="nav-roles" onclick="showPage('roles',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Roles</div>
@@ -759,11 +759,23 @@
         <div id="myCampaignsContent"><div class="loading">Loading...</div></div>
     </div>
     <div class="admin-page" id="page-inspect">
-        <div class="admin-page-head"><h1>Inspect Campaign</h1><p>Pick one of your campaigns to view its stats &amp; act</p></div>
-        <div style="max-width:520px;margin:0 auto 18px;">
-            <select id="inspectSelect" class="field" onchange="inspectShow(this.value)" style="width:100%;"></select>
+        <div class="admin-page-head"><h1>Inspection</h1><p>Open a live view as a client or as a campaign manager</p></div>
+        <div style="max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+            <div class="table-card" style="padding:20px;">
+                <div style="font-weight:700;color:#fff;margin-bottom:12px;">Inspect as Client</div>
+                <div style="display:flex;gap:8px;">
+                    <select id="inspectClientSelect" class="field" style="flex:1;"></select>
+                    <button class="btn-modal-primary" style="flex:none;" onclick="inspectAsClient()">Inspect</button>
+                </div>
+            </div>
+            <div class="table-card" style="padding:20px;">
+                <div style="font-weight:700;color:#fff;margin-bottom:12px;">Inspect as Campaign Manager</div>
+                <div style="display:flex;gap:8px;">
+                    <select id="inspectManagerSelect" class="field" style="flex:1;"></select>
+                    <button class="btn-modal-primary" style="flex:none;" onclick="inspectAsManager()">Inspect</button>
+                </div>
+            </div>
         </div>
-        <div id="inspectStats"></div>
     </div>
     <div class="admin-page" id="page-appeals">
         <div class="admin-page-head"><h1>Appeals</h1><p>Client clip disputes awaiting your decision (48h window)</p></div>
@@ -1238,7 +1250,7 @@ function applyRoleVisibility(role){
     const pill=document.getElementById('rolePill');
     if(role==='manager'){
         if(pill) pill.textContent='MANAGER';
-        ['nav-signups','nav-sync','nav-allcampaigns','nav-permits','nav-roles']
+        ['nav-signups','nav-sync','nav-allcampaigns','nav-permits','nav-roles','nav-inspect']
             .forEach(id=>{const e=document.getElementById(id); if(e) e.style.display='none';});
     } else {
         if(pill) pill.textContent='ADMIN';
@@ -1593,16 +1605,27 @@ async function viewAsManagerEmail(email){
     try{const res=await fetch('/api/admin/impersonate-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const data=await res.json();if(data.success)window.location.href=data.redirect||'/admin/dashboard';else showToast(data.message||'Error','error');}catch{showToast('Connection error','error');}
 }
 async function loadInspect(){
-    const sel=document.getElementById('inspectSelect'),stats=document.getElementById('inspectStats');if(!sel)return;
-    stats.innerHTML='';
-    try{const clients=await _fetchClientsInto();
-        if(!clients.length){sel.innerHTML='<option value="">No campaigns</option>';stats.innerHTML='<div class="shell-empty"><p>No campaigns assigned to you.</p></div>';return;}
-        sel.innerHTML='<option value="">— pick a campaign —</option>'+clients.map(c=>`<option value="${esc(c.user_id)}">${esc(c.campaign_name||c.campaign_id)} (${esc(c.full_name||'')})</option>`).join('');
-    }catch{stats.innerHTML='<div class="shell-empty"><p>Error loading.</p></div>';}
+    const cs=document.getElementById('inspectClientSelect'), ms=document.getElementById('inspectManagerSelect');
+    if(cs){
+        try{const clients=await _fetchClientsInto();
+            cs.innerHTML=clients.length?('<option value="">— pick a client —</option>'+clients.map(c=>`<option value="${esc(c.user_id)}">${esc(c.full_name||c.email)} — ${esc(c.campaign_name||'')}</option>`).join('')):'<option value="">No clients</option>';
+        }catch{cs.innerHTML='<option value="">Error loading</option>';}
+    }
+    if(ms){
+        try{const res=await fetch('/api/admin/admins');const data=await res.json();const managers=data.admins||[];
+            ms.innerHTML=managers.length?('<option value="">— pick a manager —</option>'+managers.map(m=>`<option value="${esc(m.email)}">${esc(m.name||m.email)}</option>`).join('')):'<option value="">No managers</option>';
+        }catch{ms.innerHTML='<option value="">Error loading</option>';}
+    }
 }
-function inspectShow(uid){
-    const stats=document.getElementById('inspectStats');
-    stats.innerHTML=uid?campaignCard(C(uid)):'';
+function inspectAsClient(){
+    const uid=document.getElementById('inspectClientSelect').value;
+    if(!uid){showToast('Pick a client first','error');return;}
+    aViewAs(uid);   // impersonate the client → /dashboard
+}
+function inspectAsManager(){
+    const email=document.getElementById('inspectManagerSelect').value;
+    if(!email){showToast('Pick a manager first','error');return;}
+    viewAsManagerEmail(email);   // impersonate the manager → /admin/dashboard
 }
 
 async function loadData() { loadPending(); loadAllClients(); loadStats(); }

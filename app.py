@@ -288,6 +288,9 @@ def create_tables():
                 "ALTER TABLE admins ADD COLUMN role VARCHAR(20) DEFAULT 'manager'",
                 "ALTER TABLE admins ADD COLUMN profile_pic MEDIUMTEXT",
                 "ALTER TABLE admins ADD COLUMN created_at DATETIME DEFAULT NOW()",
+                # password_hash may be NULL (super admin uses env password; the row just
+                # holds name/picture). Pre-existing tables had it NOT NULL with no default.
+                "ALTER TABLE admins MODIFY password_hash VARCHAR(255) NULL",
                 # Normalize any legacy status value left over from the old schema
                 "UPDATE users SET account_status='ACTIVE' WHERE account_status='ACTIVE_CAMPAIGN'",
             ):
@@ -295,6 +298,18 @@ def create_tables():
                     cur.execute(_alter)
                 except Exception as _ae:
                     print(f"skip alter: {_ae}")
+
+            # Seed the super-admin row so the 'me' endpoints always UPDATE (never INSERT).
+            if ADMIN_EMAIL:
+                try:
+                    cur.execute("SELECT id FROM admins WHERE email=%s", (ADMIN_EMAIL,))
+                    if not cur.fetchone():
+                        cur.execute(
+                            "INSERT INTO admins (name, email, role, password_hash) VALUES (%s,%s,'super',%s)",
+                            ('Admin', ADMIN_EMAIL, pbkdf2_sha256.hash(ADMIN_PASSWORD or 'changeme123'))
+                        )
+                except Exception as _se:
+                    print(f"super seed skip: {_se}")
 
             mysql.connection.commit()
             cur.close()
@@ -1751,16 +1766,22 @@ def admin_set_own_pic():
         return jsonify({'success': False, 'message': 'Image too large'}), 400
     email = session.get('admin_email')
     role = session.get('admin_role', 'super')
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
-    if cur.fetchone():
-        cur.execute("UPDATE admins SET profile_pic=%s WHERE email=%s", (image or None, email))
-    else:
-        cur.execute("INSERT INTO admins (name, email, role, profile_pic) VALUES (%s,%s,%s,%s)",
-                    (session.get('admin_name') or 'Admin', email, role, image or None))
-    mysql.connection.commit()
-    cur.close()
-    return jsonify({'success': True})
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+        if cur.fetchone():
+            cur.execute("UPDATE admins SET profile_pic=%s WHERE email=%s", (image or None, email))
+        else:
+            cur.execute("INSERT INTO admins (name, email, role, password_hash, profile_pic) VALUES (%s,%s,%s,%s,%s)",
+                        (session.get('admin_name') or 'Admin', email, role,
+                         pbkdf2_sha256.hash(ADMIN_PASSWORD or 'changeme123'), image or None))
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        try: cur.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': f'Could not save: {e}'}), 400
 
 @app.route('/api/admin/me/set-name', methods=['POST'])
 def admin_set_own_name():
@@ -1771,16 +1792,22 @@ def admin_set_own_name():
         return jsonify({'success': False, 'message': 'Name required'}), 400
     email = session.get('admin_email')
     role = session.get('admin_role', 'super')
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
-    if cur.fetchone():
-        cur.execute("UPDATE admins SET name=%s WHERE email=%s", (name, email))
-    else:
-        cur.execute("INSERT INTO admins (name, email, role) VALUES (%s,%s,%s)", (name, email, role))
-    mysql.connection.commit()
-    cur.close()
-    session['admin_name'] = name
-    return jsonify({'success': True})
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT id FROM admins WHERE email=%s", (email,))
+        if cur.fetchone():
+            cur.execute("UPDATE admins SET name=%s WHERE email=%s", (name, email))
+        else:
+            cur.execute("INSERT INTO admins (name, email, role, password_hash) VALUES (%s,%s,%s,%s)",
+                        (name, email, role, pbkdf2_sha256.hash(ADMIN_PASSWORD or 'changeme123')))
+        mysql.connection.commit()
+        cur.close()
+        session['admin_name'] = name
+        return jsonify({'success': True})
+    except Exception as e:
+        try: cur.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': f'Could not save: {e}'}), 400
 
 # ==========================================
 # BOT API — Discord bot calls these routes
