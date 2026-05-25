@@ -274,6 +274,13 @@ def create_tables():
                 # Who reviewed each clip (Discord admin name), shown to the client
                 "ALTER TABLE top_clips ADD COLUMN reviewed_by VARCHAR(255)",
                 "ALTER TABLE clips ADD COLUMN reviewed_by VARCHAR(255)",
+                # Engagement metrics refreshed hourly by the bot
+                "ALTER TABLE top_clips ADD COLUMN likes BIGINT DEFAULT 0",
+                "ALTER TABLE top_clips ADD COLUMN comments BIGINT DEFAULT 0",
+                "ALTER TABLE top_clips ADD COLUMN shares BIGINT DEFAULT 0",
+                "ALTER TABLE clips ADD COLUMN likes BIGINT DEFAULT 0",
+                "ALTER TABLE clips ADD COLUMN comments BIGINT DEFAULT 0",
+                "ALTER TABLE clips ADD COLUMN shares BIGINT DEFAULT 0",
                 # Ensure the admins table has every expected column even if it pre-existed
                 # (CREATE IF NOT EXISTS won't alter an existing table)
                 "ALTER TABLE admins ADD COLUMN name VARCHAR(255)",
@@ -1985,6 +1992,40 @@ def bot_update_views():
     cur.close()
     return jsonify({'success': True, 'campaigns_updated': list(affected_campaigns)})
 
+@app.route('/api/bot/refresh-stats', methods=['POST'])
+def bot_refresh_stats():
+    """Hourly stats refresh from the bot. Matches clips by URL (works for every
+    platform) and updates views/likes/comments/shares, then re-syncs approved
+    views into the campaign total + history graph."""
+    if not bot_auth():
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    updates = request.get_json().get('updates', [])
+    if not updates:
+        return jsonify({'success': False, 'message': 'No updates'}), 400
+    cur = mysql.connection.cursor()
+    affected = set()
+    for u in updates:
+        url = (u.get('url') or '').strip()
+        if not url:
+            continue
+        views    = int(u.get('views') or 0)
+        likes    = int(u.get('likes') or 0)
+        comments = int(u.get('comments') or 0)
+        shares   = int(u.get('shares') or 0)
+        cur.execute("""UPDATE top_clips SET views=%s, likes=%s, comments=%s, shares=%s, last_updated=NOW()
+                       WHERE url=%s""", (views, likes, comments, shares, url))
+        cur.execute("UPDATE clips SET views=%s, likes=%s, comments=%s, shares=%s WHERE url=%s",
+                    (views, likes, comments, shares, url))
+        cur.execute("SELECT DISTINCT campaign_id FROM top_clips WHERE url=%s", (url,))
+        for r in cur.fetchall():
+            if r.get('campaign_id'):
+                affected.add(r['campaign_id'])
+    for cid in affected:
+        resync_campaign_views(cur, cid)
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True, 'campaigns_updated': list(affected)})
+
 @app.route('/api/admin/set-cpm', methods=['POST'])
 def admin_set_cpm():
     if not session.get('admin_logged_in'):
@@ -2159,7 +2200,8 @@ def dashboard_all_clips():
         return jsonify({'success': True, 'clips': [], 'summary': empty})
     cid = user['campaign_id']
     cur.execute("""
-        SELECT id, clipper_name, platform, views, url, status, added_at, reviewed_by, reject_reason
+        SELECT id, clipper_name, platform, views, url, status, added_at, reviewed_by, reject_reason,
+               likes, comments, shares
         FROM top_clips WHERE campaign_id=%s ORDER BY added_at DESC
     """, (cid,))
     clips = cur.fetchall()
