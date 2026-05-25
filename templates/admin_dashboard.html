@@ -653,14 +653,9 @@
 </head>
 <body>
 
-<div class="toggle-btn" id="toggleBtn" onclick="toggleSidebar()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-</div>
-
 <aside class="sidebar" id="sidebar">
     <div class="sb-logo">
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Magnetise Media">
-        <span class="brand">Magnetise</span><span class="sb-pill" id="rolePill">ADMIN</span>
+        <span class="brand">Magnetise Media</span><span class="sb-pill" id="rolePill">ADMIN</span>
     </div>
     <nav class="sb-nav">
         <div class="sb-item active" data-role="all" id="nav-dashboard" onclick="showPage('dashboard',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</div>
@@ -1222,12 +1217,7 @@ function showAdminImpersonationBanner(name){
     document.body.appendChild(bar);
 }
 
-function toggleSidebar(){
-    const sb=document.getElementById('sidebar'), mw=document.getElementById('adminMain'), tb=document.getElementById('toggleBtn');
-    const closed=sb.classList.toggle('closed');
-    mw.classList.toggle('full', closed);
-    tb.classList.toggle('sidebar-closed', closed);
-}
+/* Sidebar is always visible now — toggle removed by request. */
 
 function showPage(name, el){
     document.querySelectorAll('.admin-page').forEach(p=>p.classList.remove('active'));

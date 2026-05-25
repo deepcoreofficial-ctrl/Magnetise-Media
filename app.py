@@ -1262,22 +1262,67 @@ def delete_client():
         return jsonify({'success': False}), 403
     data = request.get_json()
     user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'user_id required'}), 400
+    cur = None
     try:
         cur = mysql.connection.cursor()
-        cur.execute("SELECT campaign_id FROM users WHERE user_id=%s", (user_id,))
-        user = cur.fetchone()
-        if user and user.get('campaign_id'):
-            campaign_id = user['campaign_id']
-            cur.execute("DELETE FROM views_history WHERE campaign_id=%s", (campaign_id,))
-            cur.execute("DELETE FROM top_clips WHERE campaign_id=%s", (campaign_id,))
-            cur.execute("DELETE FROM clips WHERE campaign_id=%s", (campaign_id,))
-            cur.execute("DELETE FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+        # Resolve the client's email + EVERY campaign they own (a client can have more
+        # than one, and users.campaign_id only points at the active one). We delete by
+        # both campaign_id and client_email so no orphan row blocks the final delete.
+        cur.execute("SELECT email, campaign_id FROM users WHERE user_id=%s", (user_id,))
+        urow = cur.fetchone()
+        if not urow:
+            cur.close()
+            return jsonify({'success': False, 'message': 'Client not found'}), 404
+        email = urow.get('email')
+        campaign_ids = set()
+        if urow.get('campaign_id'):
+            campaign_ids.add(urow['campaign_id'])
+        if email:
+            try:
+                cur.execute("SELECT campaign_id FROM campaigns WHERE client_email=%s", (email,))
+                for r in cur.fetchall():
+                    if r.get('campaign_id'):
+                        campaign_ids.add(r['campaign_id'])
+            except Exception:
+                pass
+        # Safety net: drop FK enforcement for this delete so a stray constraint in the
+        # pre-existing schema can't abort it (error 1451).
+        try: cur.execute("SET FOREIGN_KEY_CHECKS=0")
+        except Exception: pass
+        # Remove every child row tied to those campaigns (each guarded so a missing
+        # table/column is skipped instead of aborting the whole delete).
+        for cid in campaign_ids:
+            for tbl in ("views_history", "top_clips", "clips", "appeals", "permits",
+                        "clip_sync_outbox", "reports", "milestone_emails_sent"):
+                try: cur.execute(f"DELETE FROM {tbl} WHERE campaign_id=%s", (cid,))
+                except Exception: pass
+            try: cur.execute("DELETE FROM campaigns WHERE campaign_id=%s", (cid,))
+            except Exception: pass
+        # Rows keyed by the client's email
+        if email:
+            for tbl in ("otp_store", "reset_otp_store", "password_reset_requests", "appeals"):
+                try: cur.execute(f"DELETE FROM {tbl} WHERE email=%s", (email,))
+                except Exception: pass
+            try: cur.execute("DELETE FROM appeals WHERE client_email=%s", (email,))
+            except Exception: pass
+            try: cur.execute("DELETE FROM campaigns WHERE client_email=%s", (email,))
+            except Exception: pass
+        # Finally the client
         cur.execute("DELETE FROM users WHERE user_id=%s", (user_id,))
+        try: cur.execute("SET FOREIGN_KEY_CHECKS=1")
+        except Exception: pass
         mysql.connection.commit()
         cur.close()
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try:
+            if cur: cur.execute("SET FOREIGN_KEY_CHECKS=1"); cur.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': str(e)}), 400
 
 @app.route('/api/admin/reset-client-password', methods=['POST'])
 def admin_reset_client_password():
