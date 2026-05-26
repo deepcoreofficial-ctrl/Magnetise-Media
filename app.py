@@ -278,6 +278,10 @@ def create_tables():
                 "ALTER TABLE top_clips ADD COLUMN likes BIGINT DEFAULT 0",
                 "ALTER TABLE top_clips ADD COLUMN comments BIGINT DEFAULT 0",
                 "ALTER TABLE top_clips ADD COLUMN shares BIGINT DEFAULT 0",
+                # last_updated is in the CREATE but a pre-existing top_clips can lack it
+                # (CREATE IF NOT EXISTS won't add it) -> the /api/bot/refresh-stats UPDATE
+                # used last_updated=NOW() and 500'd. Add it defensively.
+                "ALTER TABLE top_clips ADD COLUMN last_updated DATETIME DEFAULT NOW()",
                 "ALTER TABLE clips ADD COLUMN likes BIGINT DEFAULT 0",
                 "ALTER TABLE clips ADD COLUMN comments BIGINT DEFAULT 0",
                 "ALTER TABLE clips ADD COLUMN shares BIGINT DEFAULT 0",
@@ -2096,32 +2100,41 @@ def bot_refresh_stats():
     views into the campaign total + history graph."""
     if not bot_auth():
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
-    updates = request.get_json().get('updates', [])
+    updates = (request.get_json() or {}).get('updates', [])
     if not updates:
         return jsonify({'success': False, 'message': 'No updates'}), 400
-    cur = mysql.connection.cursor()
-    affected = set()
-    for u in updates:
-        url = (u.get('url') or '').strip()
-        if not url:
-            continue
-        views    = int(u.get('views') or 0)
-        likes    = int(u.get('likes') or 0)
-        comments = int(u.get('comments') or 0)
-        shares   = int(u.get('shares') or 0)
-        cur.execute("""UPDATE top_clips SET views=%s, likes=%s, comments=%s, shares=%s, last_updated=NOW()
-                       WHERE url=%s""", (views, likes, comments, shares, url))
-        cur.execute("UPDATE clips SET views=%s, likes=%s, comments=%s, shares=%s WHERE url=%s",
-                    (views, likes, comments, shares, url))
-        cur.execute("SELECT DISTINCT campaign_id FROM top_clips WHERE url=%s", (url,))
-        for r in cur.fetchall():
-            if r.get('campaign_id'):
-                affected.add(r['campaign_id'])
-    for cid in affected:
-        resync_campaign_views(cur, cid)
-    mysql.connection.commit()
-    cur.close()
-    return jsonify({'success': True, 'campaigns_updated': list(affected)})
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        affected = set()
+        for u in updates:
+            url = (u.get('url') or '').strip()
+            if not url:
+                continue
+            views    = int(u.get('views') or 0)
+            likes    = int(u.get('likes') or 0)
+            comments = int(u.get('comments') or 0)
+            shares   = int(u.get('shares') or 0)
+            cur.execute("""UPDATE top_clips SET views=%s, likes=%s, comments=%s, shares=%s, last_updated=NOW()
+                           WHERE url=%s""", (views, likes, comments, shares, url))
+            cur.execute("UPDATE clips SET views=%s, likes=%s, comments=%s, shares=%s WHERE url=%s",
+                        (views, likes, comments, shares, url))
+            cur.execute("SELECT DISTINCT campaign_id FROM top_clips WHERE url=%s", (url,))
+            for r in cur.fetchall():
+                if r.get('campaign_id'):
+                    affected.add(r['campaign_id'])
+        for cid in affected:
+            resync_campaign_views(cur, cid)
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True, 'campaigns_updated': list(affected)})
+    except Exception as e:
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try:
+            if cur: cur.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/admin/set-cpm', methods=['POST'])
 def admin_set_cpm():
