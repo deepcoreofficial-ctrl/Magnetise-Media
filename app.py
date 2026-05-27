@@ -29,6 +29,11 @@ app.secret_key = os.getenv("SECRET_KEY")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().strip("'\"")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip().strip("'\"")
 
+# Public base URL used in client emails (login/dashboard buttons). Defaults to the
+# live Render URL since the magnetise.media custom domain isn't pointed yet. Once
+# you set up the custom domain in Render + DNS, set PUBLIC_URL=https://magnetise.media
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://magnetise-media.onrender.com").rstrip("/")
+
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -397,7 +402,7 @@ def check_and_send_milestone_email(campaign_id, current_views, target_views, cur
         </p>
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr><td align="center">
-            <a href="https://magnetise.media/dashboard" style="display:inline-block;background:#0a0a0a;color:#fff;font-weight:700;font-size:14px;padding:13px 36px;border-radius:6px;text-decoration:none;">View Dashboard →</a>
+            <a href="{PUBLIC_URL}/dashboard" style="display:inline-block;background:#0a0a0a;color:#fff;font-weight:700;font-size:14px;padding:13px 36px;border-radius:6px;text-decoration:none;">View Dashboard →</a>
           </td></tr>
         </table>
       </td></tr>
@@ -947,6 +952,36 @@ def admin_create_campaign():
     cur.close()
     return jsonify({'success': True, 'campaign_id': campaign_id, 'campaign_name': campaign_name})
 
+@app.route('/api/admin/create-account', methods=['POST'])
+def admin_create_account():
+    """Activate a signup as a client WITHOUT a campaign. They can log in and will
+    see a 'no active campaign' state until a campaign is created for them."""
+    if not is_super():
+        return jsonify({'success': False}), 403
+    data = request.get_json() or {}
+    client_email = (data.get('client_email') or '').strip().lower()
+    password = data.get('password') or ''
+    if not client_email or not password:
+        return jsonify({'success': False, 'message': 'Email and password required'}), 400
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT user_id FROM users WHERE email=%s", (client_email,))
+        if not cur.fetchone():
+            cur.close()
+            return jsonify({'success': False, 'message': 'Signup not found'}), 404
+        # Activate the account with a password; leave campaign_id NULL (no campaign yet)
+        cur.execute("UPDATE users SET account_status='ACTIVE', password_hash=%s WHERE email=%s",
+                    (pbkdf2_sha256.hash(password), client_email))
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True, 'email': client_email})
+    except Exception as e:
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try: cur.close()
+        except Exception: pass
+        return jsonify({'success': False, 'message': str(e)}), 400
+
 @app.route('/api/admin/update-campaign', methods=['POST'])
 def admin_update_campaign():
     """Edit every campaign field the client sees. Only fields present in the request are changed."""
@@ -1069,7 +1104,7 @@ def admin_send_email():
         </table>
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr><td align="center">
-            <a href="https://magnetise.media/client-login" style="display:inline-block;background:#0a0a0a;color:#ffffff;font-weight:700;font-size:15px;padding:14px 44px;border-radius:6px;text-decoration:none;">Login to Dashboard →</a>
+            <a href="{PUBLIC_URL}/client-login" style="display:inline-block;background:#0a0a0a;color:#ffffff;font-weight:700;font-size:15px;padding:14px 44px;border-radius:6px;text-decoration:none;">Login to Dashboard →</a>
           </td></tr>
         </table>
       </td></tr>

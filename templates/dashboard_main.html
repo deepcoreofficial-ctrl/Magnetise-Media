@@ -618,7 +618,10 @@ async function init(){
         applyAvatars(d);
         if(window.innerWidth<=640){_sidebarOpen=false;document.getElementById('sidebar').classList.add('closed');document.getElementById('mainWrap').classList.add('full');document.getElementById('toggleBtn').classList.add('sidebar-closed');}
         if(d.account_status==='REJECTED'){showRejected(d.rejection_reason);return;}
-        if(!d.campaign_name){showPending();return;}
+        if(!d.campaign_name){
+            if(d.account_status==='ACTIVE'){showNoCampaign();return;}
+            showPending();return;
+        }
         renderDashboard(d);
         loadViewsGraph();
     }catch(e){showPending();}
@@ -1375,6 +1378,25 @@ function showRejected(reason){
 function showPending(){
     document.getElementById('sbEmail').textContent='{{ email }}';
     document.getElementById('dashboardContent').innerHTML=`<div class="glass"><div class="pending-state"><div class="pending-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h3>Campaign Pending</h3><p>Your account is set up but your campaign has not been created yet. Our team will reach out soon to get things started.</p><div class="contact-box" style="margin-top:24px;"><p>Need help?</p><a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a></div></div></div>`;
+}
+function showNoCampaign(){
+    document.getElementById('dashboardContent').innerHTML=`
+    <div class="glass">
+        <div class="pending-state">
+            <div class="pending-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+            </div>
+            <h3>No Active Campaign Found</h3>
+            <p>You don't have a campaign running yet. Want to launch one and start getting your content clipped at scale? Get in touch and our team will set it up for you.</p>
+            <div class="contact-box" style="margin-top:24px;">
+                <p>Want to launch a campaign? Contact us</p>
+                <a href="mailto:magnetisemedia.co@gmail.com">magnetisemedia.co@gmail.com</a>
+            </div>
+        </div>
+    </div>`;
 }
 
 function avatarInitials(name){return String(name||'?').trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?';}

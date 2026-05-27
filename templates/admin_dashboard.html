@@ -1649,6 +1649,7 @@ async function loadPending() {
             <td><span class="status status-pending"><span class="status-dot"></span>Pending</span></td>
             <td><div class="action-btns">
                 <button class="btn-sm btn-create" onclick="aCreate('${esc(u.user_id)}')">Create Campaign</button>
+                <button class="btn-sm" onclick="aCreateAccountOnly('${esc(u.user_id)}')">Account Only</button>
                 <button class="btn-sm btn-reject" onclick="aReject('${esc(u.user_id)}')">Reject</button>
             </div></td>
         </tr>`).join('');
@@ -1678,6 +1679,7 @@ async function loadAllClients() {
             if (st === 'PENDING') {
                 actions = `
                     <button class="btn-sm btn-create" onclick="aCreate('${uid}')">Create Campaign</button>
+                    <button class="btn-sm" onclick="aCreateAccountOnly('${uid}')">Account Only</button>
                     <button class="btn-sm btn-reject" onclick="aReject('${uid}')">Reject</button>`;
             } else if (st === 'REJECTED') {
                 actions = `<button class="btn-sm" onclick="aReactivate('${uid}')">Reactivate</button>`;
@@ -1969,6 +1971,20 @@ async function deleteClient(userId,name){
 
 // ---- Action dispatchers: resolve the client by id, then open the right modal ----
 function aCreate(uid){ const c=C(uid); openCampaignModal(c.user_id, c.full_name, c.email); }
+async function aCreateAccountOnly(uid){
+    const c=C(uid);
+    if(!confirm(`Create a login-only account for ${c.full_name||c.email}?\nThey can log in but will see "No active campaign" until you create one.`)) return;
+    const chars="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+    const pw=Array.from({length:10},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+    try{
+        const res=await fetch('/api/admin/create-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_email:c.email,password:pw})});
+        const data=await res.json();
+        if(data.success){
+            alert(`Account created — share these with the client:\n\nLogin: ${location.origin}/client-login\nEmail: ${c.email}\nPassword: ${pw}`);
+            loadPending(); loadAllClients();
+        } else { showToast(data.message||'Could not create account','error'); }
+    }catch{ showToast('Connection error','error'); }
+}
 function aReject(uid){ const c=C(uid); openRejectModal(c.user_id, c.full_name, c.email); }
 function aUpdateViews(uid){ const c=C(uid); openUpdateViews(c.campaign_id, c.full_name, c.current_views||0, c.target_views||0); }
 function aSetCpm(uid){ const c=C(uid); openSetCpm(c.campaign_id, c.full_name, c.cpm_rate||0); }
