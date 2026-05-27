@@ -1953,38 +1953,45 @@ def bot_submit_clip():
             yt_video_id = match.group(1)
 
     cur = mysql.connection.cursor()
+    try:
+        # Route Discord submissions by slug -> mapped website campaign
+        if campaign_slug:
+            cur.execute("SELECT website_campaign_id FROM discord_campaigns WHERE slug=%s AND sync_status='approved'", (campaign_slug,))
+            m = cur.fetchone()
+            if not m or not m.get('website_campaign_id'):
+                cur.close()
+                return jsonify({'success': False, 'message': 'Campaign not synced to a website campaign yet'}), 409
+            campaign_id = m['website_campaign_id']
 
-    # Route Discord submissions by slug -> mapped website campaign
-    if campaign_slug:
-        cur.execute("SELECT website_campaign_id FROM discord_campaigns WHERE slug=%s AND sync_status='approved'", (campaign_slug,))
-        m = cur.fetchone()
-        if not m or not m.get('website_campaign_id'):
+        # Check campaign exists
+        cur.execute("SELECT campaign_id FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+        if not cur.fetchone():
             cur.close()
-            return jsonify({'success': False, 'message': 'Campaign not synced to a website campaign yet'}), 409
-        campaign_id = m['website_campaign_id']
+            return jsonify({'success': False, 'message': 'Campaign not found'}), 404
 
-    # Check campaign exists
-    cur.execute("SELECT campaign_id FROM campaigns WHERE campaign_id=%s", (campaign_id,))
-    if not cur.fetchone():
+        # Insert clip into both tables with its moderation status
+        cur.execute("""
+            INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+        """, (campaign_id, clipper_name, platform, views, url, yt_video_id, status))
+        cur.execute("""
+            INSERT INTO clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+        """, (campaign_id, clipper_name, platform, views, url, yt_video_id, status))
+
+        # Only APPROVED clips count toward the campaign total / graph (pending submits don't move it)
+        total_views = resync_campaign_views(cur, campaign_id)
+
+        mysql.connection.commit()
         cur.close()
-        return jsonify({'success': False, 'message': 'Campaign not found'}), 404
-
-    # Insert clip into both tables with its moderation status
-    cur.execute("""
-        INSERT INTO top_clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """, (campaign_id, clipper_name, platform, views, url, yt_video_id, status))
-    cur.execute("""
-        INSERT INTO clips (campaign_id, clipper_name, platform, views, url, youtube_video_id, status)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)
-    """, (campaign_id, clipper_name, platform, views, url, yt_video_id, status))
-
-    # Only APPROVED clips count toward the campaign total / graph (pending submits don't move it)
-    total_views = resync_campaign_views(cur, campaign_id)
-
-    mysql.connection.commit()
-    cur.close()
-    return jsonify({'success': True, 'total_views': total_views})
+        return jsonify({'success': True, 'total_views': total_views})
+    except Exception as e:
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try: cur.close()
+        except Exception: pass
+        app.logger.error("submit-clip failed: %s", e)
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/api/bot/set-clip-status', methods=['POST'])
