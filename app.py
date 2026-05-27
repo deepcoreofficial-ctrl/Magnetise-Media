@@ -2043,14 +2043,25 @@ def bot_campaign_created():
     display = data.get('display_name') or slug
     created = data.get('created_at')   # optional 'YYYY-MM-DD HH:MM:SS'
     cur = mysql.connection.cursor()
+    # New slug -> pending. Re-pushed slug (re-create / Re-sync button) -> force back
+    # to pending UNLESS it's already approved (don't unlink a linked campaign).
+    # This guarantees a freshly created/re-synced campaign always shows in the
+    # Pending list, even if a stale 'closed' row for the same slug existed.
     cur.execute("""
-        INSERT INTO discord_campaigns (slug, display_name, created_at)
-        VALUES (%s,%s,%s)
-        ON DUPLICATE KEY UPDATE display_name=VALUES(display_name)
+        INSERT INTO discord_campaigns (slug, display_name, created_at, sync_status)
+        VALUES (%s,%s,%s,'pending')
+        ON DUPLICATE KEY UPDATE
+            display_name=VALUES(display_name),
+            sync_status=IF(sync_status='approved', sync_status, 'pending')
     """, (slug, display, created))
     mysql.connection.commit()
+    # Read back the resulting status so the response/logs prove what happened.
+    cur.execute("SELECT sync_status FROM discord_campaigns WHERE slug=%s", (slug,))
+    row = cur.fetchone()
+    status = (row.get('sync_status') if row else None)
     cur.close()
-    return jsonify({'success': True})
+    app.logger.info("campaign-created received: slug=%s display=%s -> status=%s", slug, display, status)
+    return jsonify({'success': True, 'slug': slug, 'sync_status': status})
 
 
 @app.route('/api/bot/campaign-finished', methods=['POST'])
