@@ -1582,26 +1582,31 @@ def admin_sync_list():
         return jsonify({'success': False}), 403
     try:
         cur = mysql.connection.cursor()
+        # NOTE: do NOT JOIN discord_campaigns to campaigns in SQL. campaigns.campaign_id
+        # (utf8mb4_general_ci) and discord_campaigns.website_campaign_id (utf8mb4_0900_ai_ci)
+        # have different collations, so a SQL '=' between them throws MySQL 1267
+        # "Illegal mix of collations" and the whole list comes back empty. We fetch each
+        # table on its own and join them in Python, which is collation-proof.
         cur.execute("""
-            SELECT d.slug, d.display_name, d.created_at, d.sync_status, d.website_campaign_id, d.synced_at,
-                   c.campaign_name AS website_campaign_name, c.assigned_admin_email
-            FROM discord_campaigns d
-            LEFT JOIN campaigns c ON d.website_campaign_id = c.campaign_id
-            ORDER BY d.received_at DESC
+            SELECT slug, display_name, created_at, sync_status, website_campaign_id, synced_at
+            FROM discord_campaigns
+            ORDER BY received_at DESC
         """)
         rows = cur.fetchall()
+        cur.execute("SELECT campaign_id, campaign_name, assigned_admin_email, status FROM campaigns")
+        camps = cur.fetchall()
+        camp_by_id = {str(c['campaign_id']): c for c in camps}
         for r in rows:
             r['created_at'] = str(r['created_at']) if r.get('created_at') else None
             r['synced_at'] = str(r['synced_at']) if r.get('synced_at') else None
-        cur.execute("""
-            SELECT campaign_id, campaign_name FROM campaigns
-            WHERE status='ACTIVE' AND campaign_id NOT IN (
-                SELECT website_campaign_id FROM discord_campaigns
-                WHERE website_campaign_id IS NOT NULL AND sync_status='approved'
-            )
-            ORDER BY created_at DESC
-        """)
-        available = cur.fetchall()
+            linked = camp_by_id.get(str(r['website_campaign_id'])) if r.get('website_campaign_id') else None
+            r['website_campaign_name'] = linked['campaign_name'] if linked else None
+            r['assigned_admin_email'] = linked['assigned_admin_email'] if linked else None
+        linked_approved = {str(r['website_campaign_id']) for r in rows
+                           if r.get('website_campaign_id') and r.get('sync_status') == 'approved'}
+        available = [{'campaign_id': c['campaign_id'], 'campaign_name': c['campaign_name']}
+                     for c in camps
+                     if c.get('status') == 'ACTIVE' and str(c['campaign_id']) not in linked_approved]
         cur.execute("SELECT name, email FROM admins WHERE role!='super' ORDER BY email")
         managers = cur.fetchall()
         cur.close()
