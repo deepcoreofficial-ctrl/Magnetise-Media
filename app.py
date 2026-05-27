@@ -40,6 +40,16 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"]
 )
 
+# The Discord bot hits /api/bot/* on a schedule — it polls /api/bot/outbox every 60s
+# (= 60 req/hour, already over the 50/hour default cap) and pushes stats hourly. Those
+# calls are authenticated by X-Bot-Secret, so they're trusted. Exempt the whole bot API
+# from rate limiting; otherwise the bot's own polling trips the per-IP limit and the site
+# starts returning 429 (HTML) for campaign-created / outbox / refresh-stats. Human-facing
+# routes (login, signup, etc.) keep their limits since they have different client IPs.
+@limiter.request_filter
+def _exempt_bot_endpoints():
+    return request.path.startswith('/api/bot/')
+
 # ==========================================
 # FIX 1: MySQL config uses individual env vars (no MYSQL_URL needed)
 # ==========================================
