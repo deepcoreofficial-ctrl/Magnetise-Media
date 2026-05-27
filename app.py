@@ -300,6 +300,11 @@ def create_tables():
                 "ALTER TABLE clips ADD COLUMN likes BIGINT DEFAULT 0",
                 "ALTER TABLE clips ADD COLUMN comments BIGINT DEFAULT 0",
                 "ALTER TABLE clips ADD COLUMN shares BIGINT DEFAULT 0",
+                # youtube_video_id is in the CREATE but pre-existing clip tables lack it
+                # (CREATE IF NOT EXISTS won't add it) -> the /api/bot/submit-clip INSERT
+                # references it and 500'd with 1054 "Unknown column". Add it where missing.
+                "ALTER TABLE top_clips ADD COLUMN youtube_video_id VARCHAR(50)",
+                "ALTER TABLE clips ADD COLUMN youtube_video_id VARCHAR(50)",
                 # Ensure the admins table has every expected column even if it pre-existed
                 # (CREATE IF NOT EXISTS won't alter an existing table)
                 "ALTER TABLE admins ADD COLUMN name VARCHAR(255)",
