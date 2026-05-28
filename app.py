@@ -2048,6 +2048,61 @@ def bot_set_clip_status():
     return jsonify({'success': True, 'total_views': total})
 
 
+@app.route('/api/bot/remove-clip', methods=['POST'])
+def bot_remove_clip():
+    """Discord bot calls this when a clip is removed (by clipper or admin) or a
+    clipper leaves a campaign. Deletes the matching clip(s) from the website and
+    re-syncs the campaign total so removed approved views are subtracted.
+    Body: campaign_slug (or campaign_id) + EITHER url (one clip) OR clipper_name
+    (all of that clipper's clips — the leave case)."""
+    if not bot_auth():
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    data = request.get_json() or {}
+    campaign_id   = (data.get('campaign_id') or '').strip()
+    campaign_slug = (data.get('campaign_slug') or '').strip()
+    url           = (data.get('url') or '').strip()
+    clipper_name  = (data.get('clipper_name') or '').strip()
+    if not url and not clipper_name:
+        return jsonify({'success': False, 'message': 'url or clipper_name required'}), 400
+    cur = mysql.connection.cursor()
+    try:
+        # Resolve the Discord slug to its linked website campaign.
+        if campaign_slug:
+            cur.execute("SELECT website_campaign_id FROM discord_campaigns WHERE slug=%s AND sync_status='approved'", (campaign_slug,))
+            m = cur.fetchone()
+            if not m or not m.get('website_campaign_id'):
+                cur.close()
+                # Not linked -> the clip was never on the website; nothing to remove.
+                return jsonify({'success': True, 'removed': 0, 'note': 'campaign not synced'})
+            campaign_id = m['website_campaign_id']
+        if not campaign_id:
+            cur.close()
+            return jsonify({'success': False, 'message': 'campaign required'}), 400
+
+        if url:
+            cur.execute("DELETE FROM top_clips WHERE campaign_id=%s AND url=%s", (campaign_id, url))
+            removed = cur.rowcount
+            cur.execute("DELETE FROM clips WHERE campaign_id=%s AND url=%s", (campaign_id, url))
+        else:
+            # Leave case: remove every clip this clipper submitted to the campaign.
+            cur.execute("DELETE FROM top_clips WHERE campaign_id=%s AND clipper_name=%s", (campaign_id, clipper_name))
+            removed = cur.rowcount
+            cur.execute("DELETE FROM clips WHERE campaign_id=%s AND clipper_name=%s", (campaign_id, clipper_name))
+
+        # Recompute the campaign total from remaining approved clips.
+        total = resync_campaign_views(cur, campaign_id)
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True, 'removed': removed, 'total_views': total})
+    except Exception as e:
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try: cur.close()
+        except Exception: pass
+        app.logger.error("remove-clip failed: %s", e)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @app.route('/api/bot/campaign-created', methods=['POST'])
 def bot_campaign_created():
     """Discord bot pushes a newly-created campaign. Lands in the Pending sync list."""
