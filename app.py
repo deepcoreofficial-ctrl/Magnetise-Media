@@ -1224,7 +1224,7 @@ def admin_get_clips(campaign_id):
         return jsonify({'success': False}), 401
     cur = mysql.connection.cursor()
     cur.execute("""
-        SELECT id, clipper_name, platform, views, url, added_at
+        SELECT id, clipper_name, platform, views, url, status, added_at
         FROM top_clips WHERE campaign_id=%s ORDER BY views DESC
     """, (campaign_id,))
     clips = cur.fetchall()

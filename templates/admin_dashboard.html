@@ -666,6 +666,7 @@
         <div class="sb-item" data-role="super" id="nav-clients" onclick="showPage('clients',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clients</div>
         <div class="sb-item" data-role="super" id="nav-sync" onclick="showPage('sync',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Campaigns-Clips Sync</div>
         <div class="sb-item" data-role="super" id="nav-allcampaigns" onclick="showPage('allcampaigns',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>All Campaigns</div>
+        <div class="sb-item" data-role="super" id="nav-clips" onclick="showPage('clips',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>Clips</div>
         <div class="sb-item" data-role="all" id="nav-mycampaigns" onclick="showPage('mycampaigns',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>My Campaigns</div>
         <div class="sb-item" data-role="super" id="nav-inspect" onclick="showPage('inspect',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Inspection</div>
         <div class="sb-item" data-role="all" id="nav-appeals" onclick="showPage('appeals',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Appeals</div>
@@ -751,6 +752,17 @@
     <div class="admin-page" id="page-allcampaigns">
         <div class="admin-page-head"><h1>All Campaigns</h1><p>Every campaign — inspect as the client or the assigned manager</p></div>
         <div id="allCampaignsContent"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="admin-page" id="page-clips">
+        <div class="admin-page-head"><h1>Clips</h1><p>Browse every clip submitted to a campaign</p></div>
+        <div class="table-card" style="padding:16px;margin-bottom:18px;">
+            <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Campaign</label>
+            <select id="clipsPageCampaign" onchange="renderClipsForCampaign(this.value)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;">
+                <option value="">— pick a campaign —</option>
+            </select>
+        </div>
+        <div id="clipsPageStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;"></div>
+        <div id="clipsPageList"><div class="shell-empty"><p>Pick a campaign to see its clips.</p></div></div>
     </div>
     <div class="admin-page" id="page-mycampaigns">
         <div class="admin-page-head"><h1>My Campaigns</h1><p>Campaigns assigned to you</p></div>
@@ -1233,7 +1245,55 @@ function showPage(name, el){
     if(name==='permits') loadPermits();
     if(name==='mycampaigns') loadMyCampaigns();
     if(name==='allcampaigns') loadAllCampaignsPage();
+    if(name==='clips') loadClipsPage();
     if(name==='inspect') loadInspect();
+}
+
+// ---- Admin Clips page (browse a campaign's clips, read-only + delete) ----
+let _clipsPreselect=null;
+async function loadClipsPage(){
+    const sel=document.getElementById('clipsPageCampaign');
+    if(sel){
+        try{
+            const clients=await _fetchClientsInto();
+            const opts=clients.filter(c=>c.campaign_id).map(c=>`<option value="${esc(c.campaign_id)}">${esc(c.campaign_name||c.campaign_id)} — ${esc(c.email||'')}</option>`).join('');
+            sel.innerHTML='<option value="">— pick a campaign —</option>'+opts;
+        }catch{ sel.innerHTML='<option value="">Error loading</option>'; }
+    }
+    if(_clipsPreselect && sel){ sel.value=_clipsPreselect; renderClipsForCampaign(_clipsPreselect); _clipsPreselect=null; }
+    else { document.getElementById('clipsPageStats').innerHTML=''; document.getElementById('clipsPageList').innerHTML='<div class="shell-empty"><p>Pick a campaign to see its clips.</p></div>'; }
+}
+async function renderClipsForCampaign(cid){
+    const statsEl=document.getElementById('clipsPageStats'), listEl=document.getElementById('clipsPageList');
+    if(!cid){ statsEl.innerHTML=''; listEl.innerHTML='<div class="shell-empty"><p>Pick a campaign to see its clips.</p></div>'; return; }
+    listEl.innerHTML='<div class="loading">Loading...</div>';
+    let clips=[];
+    try{ const res=await fetch('/api/admin/clips/'+encodeURIComponent(cid)); const data=await res.json(); clips=data.clips||[]; }
+    catch{ listEl.innerHTML='<div class="shell-empty"><p>Error loading clips.</p></div>'; statsEl.innerHTML=''; return; }
+    const low=s=>(s||'').toLowerCase();
+    const total=clips.length;
+    const approved=clips.filter(c=>low(c.status)==='approved').length;
+    const pending=clips.filter(c=>low(c.status)==='pending').length;
+    const apprViews=clips.filter(c=>low(c.status)==='approved').reduce((s,c)=>s+Number(c.views||0),0);
+    statsEl.innerHTML=[['Total Clips',total],['Approved',approved],['Pending',pending],['Approved Views',apprViews.toLocaleString()]]
+        .map(([k,v])=>`<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:16px 18px;"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${k}</div><div style="font-size:24px;font-weight:800;color:#fff;">${v}</div></div>`).join('');
+    if(!total){ listEl.innerHTML='<div class="shell-empty"><p>No clips for this campaign yet.</p></div>'; return; }
+    listEl.innerHTML='<div class="table-card" style="padding:4px 16px;">'+clips.map(c=>{
+        const st=low(c.status)||'pending';
+        const stColor=st==='approved'?'#4ade80':(st==='rejected'?'#ff8080':'#ffd479');
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+            <div style="min-width:0;">
+                <div style="font-size:13px;font-weight:600;color:#fff;">${esc(c.clipper_name||'—')} <span style="color:var(--muted);font-weight:400;">• ${esc(c.platform||'')}</span> <span style="color:${stColor};font-weight:700;text-transform:capitalize;font-size:12px;">• ${esc(st)}</span></div>
+                <div style="font-size:12px;color:var(--muted);">${Number(c.views||0).toLocaleString()} views${c.url?' • <a href="'+esc(c.url)+'" target="_blank" style="color:#8ab4ff;">link</a>':''}</div>
+            </div>
+            <button class="btn-sm" onclick="deleteClipPage(${c.id},'${esc(cid)}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;flex-shrink:0;">Delete</button>
+        </div>`;
+    }).join('')+'</div>';
+}
+async function deleteClipPage(clipId, cid){
+    if(!confirm('Delete this clip from the website? (This does not remove it from Discord.)')) return;
+    try{ await fetch('/api/admin/delete-clip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clip_id:clipId})}); }catch{}
+    renderClipsForCampaign(cid);
 }
 
 // Phase 2 will scope sections per role using the admin's role from /api/admin/check.
@@ -1242,7 +1302,7 @@ function applyRoleVisibility(role){
     const pill=document.getElementById('rolePill');
     if(role==='manager'){
         if(pill) pill.textContent='MANAGER';
-        ['nav-signups','nav-sync','nav-allcampaigns','nav-permits','nav-roles','nav-inspect']
+        ['nav-signups','nav-sync','nav-allcampaigns','nav-clips','nav-permits','nav-roles','nav-inspect']
             .forEach(id=>{const e=document.getElementById(id); if(e) e.style.display='none';});
     } else {
         if(pill) pill.textContent='ADMIN';
@@ -1992,7 +2052,7 @@ function aUpdateViews(uid){ const c=C(uid); openUpdateViews(c.campaign_id, c.ful
 function aSetCpm(uid){ const c=C(uid); openSetCpm(c.campaign_id, c.full_name, c.cpm_rate||0); }
 function aMarkComplete(uid){ const c=C(uid); openMarkComplete(c.campaign_id, c.full_name, c.email); }
 function aSendEmail(uid){ const c=C(uid); openSendEmailFromClient(c.email, c.full_name); }
-function aClips(uid){ const c=C(uid); openClipsModal(c.campaign_id); }
+function aClips(uid){ const c=C(uid); if(!c||!c.campaign_id){showToast('No campaign for this client','error');return;} _clipsPreselect=c.campaign_id; showPage('clips', document.getElementById('nav-clips')); }
 function aReactivate(uid){ reactivateClient(uid); }
 function aDelete(uid){ const c=C(uid); deleteClient(uid, c.full_name || 'this client'); }
 function aEditCampaign(uid){ openEditCampaign(C(uid)); }
