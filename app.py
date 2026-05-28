@@ -2562,23 +2562,27 @@ def dashboard_weekly_milestones():
     for w in range(total_weeks):
         week_start = start + timedelta(weeks=w)
         week_end   = week_start + timedelta(days=6)
-        # Get max views recorded in this week window
+        # Use the CUMULATIVE total at each week boundary (latest history point up to
+        # that time), NOT the peak. MAX(views) made an approved-then-rejected clip mark
+        # the week "hit" forever; the latest value correctly drops back when views are
+        # removed/rejected so the milestone reflects the real current total.
         cur.execute("""
-            SELECT MAX(views) as peak FROM views_history
+            SELECT views FROM views_history
             WHERE campaign_id=(SELECT campaign_id FROM users WHERE email=%s)
-            AND recorded_at BETWEEN %s AND %s
-        """, (session['user_email'], week_start, week_end))
+            AND recorded_at <= %s
+            ORDER BY recorded_at DESC LIMIT 1
+        """, (session['user_email'], week_end))
         row = cur.fetchone()
-        peak = row['peak'] or 0
-        # Get start-of-week baseline
+        end_cum = (row['views'] if row else 0) or 0
         cur.execute("""
-            SELECT MAX(views) as base FROM views_history
+            SELECT views FROM views_history
             WHERE campaign_id=(SELECT campaign_id FROM users WHERE email=%s)
             AND recorded_at < %s
+            ORDER BY recorded_at DESC LIMIT 1
         """, (session['user_email'], week_start))
         base_row = cur.fetchone()
-        baseline = base_row['base'] or 0
-        delivered = max(peak - baseline, 0)
+        baseline = (base_row['views'] if base_row else 0) or 0
+        delivered = max(end_cum - baseline, 0)
         weeks.append({
             'week': w + 1,
             'target': weekly_target,
