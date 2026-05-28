@@ -633,6 +633,9 @@
         .admin-page-head{margin-bottom:22px;text-align:center;}
         .admin-page-head h1{font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.4px;}
         .admin-page-head p{color:var(--muted);font-size:13px;margin-top:3px;}
+        /* Native <select> options inherit the select's white text on a white popup,
+           making them invisible. Force a dark background + light text so they read. */
+        select option{background:#161616;color:#fff;}
         .toggle-btn{position:fixed;top:14px;left:250px;z-index:300;width:34px;height:34px;background:#1a1a1a;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#888;transition:left .3s ease;}
         .toggle-btn:hover{color:#fff;background:rgba(255,255,255,0.08);}
         .toggle-btn.sidebar-closed{left:12px;}
@@ -1012,10 +1015,9 @@
         <input type="text" id="clipperNameInput" placeholder="Clipper name" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;"/>
         <select id="clipPlatformInput" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;">
           <option value="">Platform...</option>
-          <option value="TikTok">TikTok</option>
-          <option value="YouTube">YouTube</option>
-          <option value="Reels">Reels</option>
-          <option value="Shorts">Shorts</option>
+          <option value="IG">Instagram</option>
+          <option value="YT">YouTube</option>
+          <option value="TT">TikTok</option>
         </select>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
