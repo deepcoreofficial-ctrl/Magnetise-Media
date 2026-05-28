@@ -1251,6 +1251,35 @@ def admin_delete_clip():
     cur.close()
     return jsonify({'success': True})
 
+@app.route('/api/admin/reset-clip-data', methods=['POST'])
+def admin_reset_clip_data():
+    """Super-admin: wipe ALL clips + top_clips, reset every campaign's view total to 0,
+    and clear views_history. For clearing test data before launch. Campaigns and client
+    accounts are kept — only clip/stat data is removed."""
+    if not is_super():
+        return jsonify({'success': False}), 403
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) AS c FROM top_clips")
+        cleared = (cur.fetchone() or {}).get('c', 0)
+        cur.execute("DELETE FROM top_clips")
+        cur.execute("DELETE FROM clips")
+        cur.execute("UPDATE campaigns SET current_views=0")
+        try:
+            cur.execute("DELETE FROM views_history")
+        except Exception:
+            pass
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True, 'cleared_clips': cleared})
+    except Exception as e:
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try: cur.close()
+        except Exception: pass
+        app.logger.error("reset-clip-data failed: %s", e)
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 # Edit an existing clip (top_clips is what the client dashboard reads; clips is mirrored for the PDF)
 @app.route('/api/admin/update-clip', methods=['POST'])
 def admin_update_clip():

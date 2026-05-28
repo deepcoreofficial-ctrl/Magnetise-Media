@@ -755,6 +755,9 @@
     </div>
     <div class="admin-page" id="page-clips">
         <div class="admin-page-head"><h1>Clips</h1><p>Browse every clip submitted to a campaign</p></div>
+        <div style="text-align:right;margin-bottom:10px;">
+            <button class="btn-sm" style="border-color:rgba(255,85,85,0.35);color:#ff8080;" onclick="resetAllClipData()">Reset ALL clip data</button>
+        </div>
         <div class="table-card" style="padding:16px;margin-bottom:18px;">
             <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Campaign</label>
             <select id="clipsPageCampaign" onchange="renderClipsForCampaign(this.value)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:8px;font-size:14px;">
@@ -1251,6 +1254,16 @@ function showPage(name, el){
 
 // ---- Admin Clips page (browse a campaign's clips, read-only + delete) ----
 let _clipsPreselect=null;
+async function resetAllClipData(){
+    if(!confirm('This deletes EVERY clip from ALL campaigns and resets all view totals to 0. This cannot be undone. Continue?')) return;
+    if(!confirm('Are you absolutely sure? This wipes ALL clip data site-wide.')) return;
+    try{
+        const res=await fetch('/api/admin/reset-clip-data',{method:'POST'});
+        const data=await res.json();
+        if(data.success){ showToast('Clip data reset — '+(data.cleared_clips||0)+' clips cleared','success'); loadClipsPage(); }
+        else showToast(data.message||'Reset failed','error');
+    }catch{ showToast('Connection error','error'); }
+}
 async function loadClipsPage(){
     const sel=document.getElementById('clipsPageCampaign');
     if(sel){
