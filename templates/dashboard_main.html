@@ -1042,14 +1042,17 @@ function openAppeal(idx){
 }
 async function submitAppeal(){
     const m=document.getElementById('appealMsg');
-    if(!_appealWant){m.textContent='Pick approve or reject first.';m.className='form-msg error';return;}
+    // openAppeal() sets this div to display:none; every message path below must
+    // re-show it or the user sees "nothing happen" on submit.
+    const show=(t,c)=>{m.textContent=t;m.className='form-msg '+c;m.style.display='block';};
+    if(!_appealWant){show('Pick approve or reject first.','error');return;}
     const reason=document.getElementById('appealReason').value.trim();
     try{
         const res=await fetch('/api/dashboard/appeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clip_url:_appealUrl,desired_status:_appealWant,reason})});
         const data=await res.json();
-        if(data.success){m.textContent='Appeal submitted — the team will review it.';m.className='form-msg success';setTimeout(()=>closeModal('appealModal'),1200);}
-        else{m.textContent=data.message||'Error.';m.className='form-msg error';}
-    }catch(e){m.textContent='Connection error.';m.className='form-msg error';}
+        if(data.success){show('Appeal submitted — the team will review it.','success');setTimeout(()=>closeModal('appealModal'),1200);}
+        else{show(data.message||'Error.','error');}
+    }catch(e){show('Connection error.','error');}
 }
 
 async function renderAnalytics(d){

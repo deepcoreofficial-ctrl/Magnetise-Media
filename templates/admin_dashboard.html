@@ -1584,9 +1584,9 @@ async function loadAllCampaignsPage(){
     const el=document.getElementById('allCampaignsContent');if(!el)return;
     try{const clients=await _fetchClientsInto();
         if(!clients.length){el.innerHTML='<div class="shell-empty"><p>No campaigns yet.</p></div>';return;}
-        el.innerHTML='<div class="table-card"><div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Client</th><th>Status</th><th>Assigned</th><th>Inspect</th></tr></thead><tbody>'+clients.map(c=>{
+        el.innerHTML='<div class="table-card"><div class="table-wrap"><table><thead><tr><th>Campaign</th><th>Client</th><th>Status</th><th>Assigned</th><th>Actions</th></tr></thead><tbody>'+clients.map(c=>{
             const sm={ACTIVE:['status-active','Active'],COMPLETED:['status-completed','Completed']}[(c.campaign_status||'').toUpperCase()]||['status-active',c.campaign_status||'—'];
-            return `<tr><td><strong>${esc(c.campaign_name||'—')}</strong></td><td class="td-email">${esc(c.email||'')}</td><td><span class="status ${sm[0]}"><span class="status-dot"></span>${sm[1]}</span></td><td class="td-muted">${esc(c.assigned_admin_email||'Admin')}</td><td><div class="action-btns"><button class="btn-sm btn-view" onclick="aViewAs('${esc(c.user_id)}')">As client</button>${c.assigned_admin_email?`<button class="btn-sm" onclick="viewAsManagerEmail('${esc(c.assigned_admin_email)}')">As manager</button>`:''}</div></td></tr>`;
+            return `<tr><td><strong>${esc(c.campaign_name||'—')}</strong></td><td class="td-email">${esc(c.email||'')}</td><td><span class="status ${sm[0]}"><span class="status-dot"></span>${sm[1]}</span></td><td class="td-muted">${esc(c.assigned_admin_email||'Admin')}</td><td><div class="action-btns">${c.campaign_id?`<button class="btn-sm" onclick="aClips('${esc(c.user_id)}')">Clips</button>`:''}<button class="btn-sm btn-view" onclick="aViewAs('${esc(c.user_id)}')">As client</button>${c.assigned_admin_email?`<button class="btn-sm" onclick="viewAsManagerEmail('${esc(c.assigned_admin_email)}')">As manager</button>`:''}</div></td></tr>`;
         }).join('')+'</tbody></table></div></div>';
     }catch{el.innerHTML='<div class="shell-empty"><p>Error loading.</p></div>';}
 }

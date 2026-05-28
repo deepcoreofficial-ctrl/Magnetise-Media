@@ -2501,26 +2501,38 @@ def dashboard_appeal():
         return jsonify({'success': False, 'message': 'Clip required'}), 400
     email = session['user_email']
     cur = mysql.connection.cursor()
-    cur.execute("SELECT campaign_id FROM users WHERE email=%s", (email,))
-    u = cur.fetchone()
-    if not u or not u['campaign_id']:
-        cur.close(); return jsonify({'success': False, 'message': 'No campaign'}), 400
-    cid = u['campaign_id']
-    cur.execute("SELECT clipper_name, platform, status FROM top_clips WHERE campaign_id=%s AND url=%s LIMIT 1", (cid, clip_url))
-    clip = cur.fetchone()
-    if not clip:
-        cur.close(); return jsonify({'success': False, 'message': 'Clip not found'}), 404
-    cur.execute("SELECT id FROM appeals WHERE campaign_id=%s AND clip_url=%s AND status='open'", (cid, clip_url))
-    if cur.fetchone():
-        cur.close(); return jsonify({'success': False, 'message': 'An appeal is already open for this clip'}), 400
-    cur.execute("""INSERT INTO appeals (campaign_id, clip_url, clipper_name, platform, current_status,
-                       desired_status, reason, client_email, expires_at)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (cid, clip_url, clip.get('clipper_name'), clip.get('platform'), clip.get('status'),
-                 desired, reason, email, datetime.now() + timedelta(hours=48)))
-    mysql.connection.commit()
-    cur.close()
-    return jsonify({'success': True})
+    try:
+        cur.execute("SELECT campaign_id FROM users WHERE email=%s", (email,))
+        u = cur.fetchone()
+        if not u or not u['campaign_id']:
+            cur.close(); return jsonify({'success': False, 'message': 'No campaign'}), 400
+        cid = u['campaign_id']
+        cur.execute("SELECT clipper_name, platform, status FROM top_clips WHERE campaign_id=%s AND url=%s LIMIT 1", (cid, clip_url))
+        clip = cur.fetchone()
+        if not clip:
+            # fall back to the clips table in case the row only exists there
+            cur.execute("SELECT clipper_name, platform, status FROM clips WHERE campaign_id=%s AND url=%s LIMIT 1", (cid, clip_url))
+            clip = cur.fetchone()
+        if not clip:
+            cur.close(); return jsonify({'success': False, 'message': 'Clip not found'}), 404
+        cur.execute("SELECT id FROM appeals WHERE campaign_id=%s AND clip_url=%s AND status='open'", (cid, clip_url))
+        if cur.fetchone():
+            cur.close(); return jsonify({'success': False, 'message': 'An appeal is already open for this clip'}), 400
+        cur.execute("""INSERT INTO appeals (campaign_id, clip_url, clipper_name, platform, current_status,
+                           desired_status, reason, client_email, expires_at)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (cid, clip_url, clip.get('clipper_name'), clip.get('platform'), clip.get('status'),
+                     desired, reason, email, datetime.now() + timedelta(hours=48)))
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        try: mysql.connection.rollback()
+        except Exception: pass
+        try: cur.close()
+        except Exception: pass
+        app.logger.error("appeal failed: %s", e)
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/dashboard/weekly-milestones')
 def dashboard_weekly_milestones():
