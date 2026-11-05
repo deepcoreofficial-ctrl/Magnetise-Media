@@ -1080,16 +1080,32 @@ def admin_send_email():
         SELECT u.full_name, u.email, c.campaign_name, c.campaign_id,
                c.budget_total, c.target_views, c.start_date, c.expected_end_date
         FROM users u
-        JOIN campaigns c ON u.campaign_id = c.campaign_id
+        LEFT JOIN campaigns c ON u.campaign_id = c.campaign_id
         WHERE u.email = %s
     """, (client_email,))
     info = cur.fetchone()
     cur.close()
 
     if not info:
-        return jsonify({'success': False, 'message': 'Client or campaign not found'}), 404
+        return jsonify({'success': False, 'message': 'Client not found'}), 404
 
-    subject = "Your Campaign is Ready — Login Details"
+    # Campaign details are shown only when the client already has a campaign.
+    # Account-only clients (created with "Create account") get just login details.
+    has_campaign = bool(info.get('campaign_id'))
+    campaign_block = (f"""
+        <div style="font-size:11px;font-weight:700;color:#999;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Campaign Details</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;">
+          <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;">Campaign</td><td style="padding:10px 16px;font-size:13px;color:#1a1a1a;font-weight:600;text-align:right;">{info['campaign_name']}</td></tr>
+          <tr><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Campaign ID</td><td style="padding:10px 16px;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #f0f0f0;font-family:'Courier New',monospace;">{info['campaign_id']}</td></tr>
+          <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Budget</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;border-top:1px solid #f0f0f0;">${info['budget_total']:,.0f}</td></tr>
+          <tr><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Target Views</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;border-top:1px solid #f0f0f0;">{info['target_views']:,}</td></tr>
+          <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Duration</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;border-top:1px solid #f0f0f0;">{str(info['start_date'])} → {str(info['expected_end_date'])}</td></tr>
+        </table>
+""" if has_campaign else "")
+    intro_text = ("Your campaign is live. Below are your login credentials."
+                  if has_campaign else
+                  "Your account is ready. Below are your login credentials. We will set up your campaign shortly.")
+    subject = "Your Campaign is Ready — Login Details" if has_campaign else "Your Magnetise Media Account is Ready — Login Details"
     html_content = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -1103,15 +1119,8 @@ def admin_send_email():
       </td></tr>
       <tr><td style="padding:36px 40px;">
         <p style="font-size:16px;color:#1a1a1a;margin:0 0 12px;">Hey <strong>{info['full_name']}</strong>,</p>
-        <p style="font-size:14px;color:#555555;line-height:1.7;margin:0 0 28px;">Your campaign is live. Below are your login credentials.</p>
-        <div style="font-size:11px;font-weight:700;color:#999;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Campaign Details</div>
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;">
-          <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;">Campaign</td><td style="padding:10px 16px;font-size:13px;color:#1a1a1a;font-weight:600;text-align:right;">{info['campaign_name']}</td></tr>
-          <tr><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Campaign ID</td><td style="padding:10px 16px;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #f0f0f0;font-family:'Courier New',monospace;">{info['campaign_id']}</td></tr>
-          <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Budget</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;border-top:1px solid #f0f0f0;">${info['budget_total']:,.0f}</td></tr>
-          <tr><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Target Views</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;border-top:1px solid #f0f0f0;">{info['target_views']:,}</td></tr>
-          <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;border-top:1px solid #f0f0f0;">Duration</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;border-top:1px solid #f0f0f0;">{str(info['start_date'])} → {str(info['expected_end_date'])}</td></tr>
-        </table>
+        <p style="font-size:14px;color:#555555;line-height:1.7;margin:0 0 28px;">{intro_text}</p>
+        {campaign_block}
         <div style="font-size:11px;font-weight:700;color:#999;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Login Credentials</div>
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;">
           <tr style="background:#f9f9f9;"><td style="padding:10px 16px;font-size:13px;color:#888;">Email</td><td style="padding:10px 16px;font-size:13px;font-weight:600;text-align:right;">{info['email']}</td></tr>
@@ -1139,7 +1148,8 @@ def admin_send_email():
         mysql.connection.commit()
         cur.close()
         return jsonify({'success': True, 'message': f'Email sent to {client_email}'})
-    except ApiException as e:
+    except Exception as e:
+        app.logger.error("send-email failed: %s", e)
         return jsonify({'success': False, 'message': f'Email error: {str(e)}'}), 500
 
 @app.route('/api/admin/complete-campaign', methods=['POST'])
