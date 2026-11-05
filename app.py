@@ -422,7 +422,7 @@ def check_and_send_milestone_email(campaign_id, current_views, target_views, cur
         </table>
       </td></tr>
       <tr><td style="border-top:1px solid #eee;padding:20px 40px;text-align:center;background:#fafafa;">
-        <p style="font-size:12px;color:#aaa;margin:0;">Magnetise Media · <a href="mailto:magnetisemedia.co@gmail.com" style="color:#555;text-decoration:none;">magnetisemedia.co@gmail.com</a></p>
+        <p style="font-size:12px;color:#aaa;margin:0;">Magnetise Media · <a href="mailto:magnetisemediaa@gmail.com" style="color:#555;text-decoration:none;">magnetisemediaa@gmail.com</a></p>
       </td></tr>
     </table>
   </td></tr>
@@ -634,7 +634,7 @@ def send_otp():
       <tr><td style="border-top:1px solid #eeeeee;padding:20px 40px;text-align:center;background:#fafafa;">
         <p style="font-size:12px;color:#aaaaaa;margin:0;">
           Magnetise Media &nbsp;·&nbsp;
-          <a href="mailto:magnetisemedia.co@gmail.com" style="color:#555555;text-decoration:none;">magnetisemedia.co@gmail.com</a>
+          <a href="mailto:magnetisemediaa@gmail.com" style="color:#555555;text-decoration:none;">magnetisemediaa@gmail.com</a>
         </p>
       </td></tr>
     </table>
@@ -1124,7 +1124,7 @@ def admin_send_email():
         </table>
       </td></tr>
       <tr><td style="border-top:1px solid #eee;padding:20px 40px;text-align:center;background:#fafafa;">
-        <p style="font-size:12px;color:#aaa;margin:0;">Magnetise Media · <a href="mailto:magnetisemedia.co@gmail.com" style="color:#555;text-decoration:none;">magnetisemedia.co@gmail.com</a></p>
+        <p style="font-size:12px;color:#aaa;margin:0;">Magnetise Media · <a href="mailto:magnetisemediaa@gmail.com" style="color:#555;text-decoration:none;">magnetisemediaa@gmail.com</a></p>
       </td></tr>
     </table>
   </td></tr>
@@ -2924,7 +2924,7 @@ def admin_invoice(campaign_id):
     story.append(Spacer(1, 30))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#e0e0e0'), spaceAfter=8))
     story.append(Paragraph(
-        f"Magnetise Media · magnetise.media · magnetisemedia.co@gmail.com",
+        f"Magnetise Media · magnetise.media · magnetisemediaa@gmail.com",
         ParagraphStyle('Footer', fontSize=9, textColor=MUTED, alignment=1)
     ))
 
