@@ -485,7 +485,9 @@ def privacy():
 def terms():
     return render_template('terms.html')
 
-
+@app.route('/favicon.ico')
+def favicon():
+    return send_file(os.path.join(app.root_path, 'static', 'favicon.ico'), mimetype='image/x-icon')
 # ==========================================
 # CLIENT AUTH ROUTES
 # ==========================================
@@ -1716,15 +1718,17 @@ def admin_appeals_list():
     a = eff_admin()
     try:
         cur = mysql.connection.cursor()
-        base = "SELECT ap.*, c.campaign_name FROM appeals ap LEFT JOIN campaigns c ON ap.campaign_id=c.campaign_id "
-        if a['role'] == 'super':
-            cur.execute(base + "ORDER BY ap.created_at DESC")
-        else:
-            cur.execute(base + "WHERE c.assigned_admin_email=%s ORDER BY ap.created_at DESC", (a['email'],))
+        cur.execute("SELECT * FROM appeals ORDER BY created_at DESC")
         rows = cur.fetchall()
+        cur.execute("SELECT campaign_id, campaign_name, assigned_admin_email FROM campaigns")
+        camps = {str(c['campaign_id']): c for c in cur.fetchall()}
         cur.close()
-    except Exception:
+    except Exception as e:
+        app.logger.error("appeals list failed: %s", e)
         return jsonify({'success': True, 'appeals': []})
+    if a['role'] != 'super':
+        rows = [r for r in rows
+                if (camps.get(str(r.get('campaign_id'))) or {}).get('assigned_admin_email') == a['email']]
     now = datetime.now()
     out = []
     for r in rows:
@@ -1732,8 +1736,9 @@ def admin_appeals_list():
         st = r['status']
         if st == 'open' and exp and now > exp:
             st = 'expired'
+        camp = camps.get(str(r.get('campaign_id'))) or {}
         out.append({
-            'id': r['id'], 'campaign_id': r['campaign_id'], 'campaign_name': r.get('campaign_name'),
+            'id': r['id'], 'campaign_id': r['campaign_id'], 'campaign_name': camp.get('campaign_name'),
             'clip_url': r['clip_url'], 'clipper_name': r['clipper_name'], 'platform': r['platform'],
             'current_status': r['current_status'], 'desired_status': r['desired_status'],
             'reason': r['reason'], 'status': st, 'decision': r.get('decision'),
@@ -1815,12 +1820,16 @@ def admin_permits_list():
         return jsonify({'success': False}), 403
     try:
         cur = mysql.connection.cursor()
-        cur.execute("SELECT p.*, c.campaign_name FROM permits p LEFT JOIN campaigns c ON p.campaign_id=c.campaign_id ORDER BY p.created_at DESC")
+        cur.execute("SELECT * FROM permits ORDER BY created_at DESC")
         rows = cur.fetchall()
+        cur.execute("SELECT campaign_id, campaign_name FROM campaigns")
+        names = {str(c['campaign_id']): c['campaign_name'] for c in cur.fetchall()}
         cur.close()
-    except Exception:
+    except Exception as e:
+        app.logger.error("permits list failed: %s", e)
         return jsonify({'success': True, 'permits': []})
     for r in rows:
+        r['campaign_name'] = names.get(str(r.get('campaign_id')))
         r['created_at'] = str(r['created_at']) if r.get('created_at') else None
         r['resolved_at'] = str(r['resolved_at']) if r.get('resolved_at') else None
     return jsonify({'success': True, 'permits': rows})
@@ -2647,19 +2656,19 @@ def dashboard_views_history():
 
     if days:
         cur.execute("""
-            SELECT views, recorded_at FROM views_history
+            SELECT views, recorded_at, UNIX_TIMESTAMP(recorded_at) AS ts FROM views_history
             WHERE campaign_id=%s AND recorded_at >= NOW() - INTERVAL %s DAY
             ORDER BY recorded_at ASC
         """, (user['campaign_id'], int(days)))
     else:
         cur.execute("""
-            SELECT views, recorded_at FROM views_history
+            SELECT views, recorded_at, UNIX_TIMESTAMP(recorded_at) AS ts FROM views_history
             WHERE campaign_id=%s ORDER BY recorded_at ASC
         """, (user['campaign_id'],))
 
     rows = cur.fetchall()
     cur.close()
-    history = [{'views': r['views'], 'date': str(r['recorded_at'])} for r in rows]
+    history = [{'views': r['views'], 'date': str(r['recorded_at']), 'ts': int(r['ts'] or 0)} for r in rows]
     return jsonify({'success': True, 'history': history})
 
 
