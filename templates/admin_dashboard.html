@@ -738,6 +738,7 @@
     <!-- SHELLS (built in later phases) -->
     <div class="admin-page" id="page-sync">
         <div class="admin-page-head"><h1>Campaigns-Clips Sync</h1><p>Link Discord campaigns to website campaigns</p></div>
+        <p style="text-align:center;color:var(--muted);font-size:13px;margin:-6px 0 16px;">Need a website campaign first? <a href="#" style="color:#fff;text-decoration:underline;" onclick="showPage('clients',document.getElementById('nav-clients'));return false;">Open Clients and press + Create Campaign</a>.</p>
         <div style="display:flex;gap:8px;margin-bottom:18px;">
             <button class="btn-sm sync-tab active" id="syncTabPending" onclick="switchSyncTab('pending')">Pending <span class="badge-count" id="syncPendingBadge">0</span></button>
             <button class="btn-sm sync-tab" id="syncTabApproved" onclick="switchSyncTab('approved')">Approved <span class="badge-count" id="syncApprovedBadge">0</span></button>
@@ -875,7 +876,8 @@
                 <div class="field"><label>Start Date</label><input type="date" id="campaignStart"/></div>
                 <div class="field"><label>End Date</label><input type="date" id="campaignEnd"/></div>
             </div>
-            <div class="pw-section">
+            <div class="modal-client-info" id="campaignExistingNote" style="display:none;margin-bottom:14px;"></div>
+            <div class="pw-section" id="campaignPwSection">
                 <div class="pw-section-title">Client Password</div>
                 <div class="pw-generated"><span id="generatedPw"></span><button class="btn-regen" onclick="generatePassword()">Regenerate</button></div>
                 <div class="field" style="margin-bottom:0;"><label>Custom Password (optional)</label><input type="text" id="customPw" placeholder="Leave empty to use generated"/></div>
@@ -889,11 +891,11 @@
         <div class="success-state" id="campaignSuccess" style="display:none;">
             <div class="success-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
             <h3>Campaign Created</h3>
-            <p>Login credentials are ready to send.</p>
+            <p id="campaignSuccessText">Login credentials are ready to send.</p>
             <div class="creds-box" id="credsDisplay"></div>
             <div class="modal-actions" style="margin-top:16px;">
                 <button class="btn-modal-cancel" onclick="closeModal('campaignModal');loadData();">Close</button>
-                <button class="btn-modal-primary" onclick="openSendEmailModal()">Send to Client</button>
+                <button class="btn-modal-primary" id="campaignSendBtn" onclick="openSendEmailModal()">Send to Client</button>
             </div>
         </div>
     </div>
@@ -1773,6 +1775,8 @@ async function loadAllClients() {
                     <button class="btn-sm" onclick="aClips('${uid}')">Clips</button>
                     <button class="btn-sm btn-view" onclick="aReport('${uid}')">Report</button>`;
             }
+            const createBtn = ((st === 'ACTIVE' || st === 'COMPLETED') && _me.role === 'super')
+                ? `<button class="btn-sm btn-create" onclick="aCreate('${uid}')">+ Create Campaign</button>` : '';
             const shared = `
                 ${hasCampaign ? `<a class="btn-sm" href="/api/admin/invoice/${esc(c.campaign_id)}" target="_blank">Invoice</a>` : ''}
                 ${(st==='ACTIVE'||st==='COMPLETED') ? `<button class="btn-sm" onclick="aResetPw('${uid}')">Reset Password</button>` : ''}
@@ -1784,14 +1788,26 @@ async function loadAllClients() {
                 <td class="td-email">${esc(c.email)}</td>
                 <td class="td-muted">${c.campaign_name ? esc(c.campaign_name) : '—'}</td>
                 <td><span class="status ${meta[0]}"><span class="status-dot"></span>${meta[1]}</span></td>
-                <td><div class="action-btns">${actions}${shared}</div></td>
+                <td><div class="action-btns">${createBtn}${actions}${shared}</div></td>
             </tr>`;
         }).join('');
     } catch { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Error loading data</p></div></td></tr>`; }
 }
 
 function openCampaignModal(userId, name, email) {
-    currentClient = { userId, name, email };
+    const known = _clientsById[userId] || {};
+    const stKnown = (known.account_status || '').toUpperCase();
+    const existing = (stKnown === 'ACTIVE' || stKnown === 'COMPLETED');   // already has a login + password
+    currentClient = { userId, name, email, existing };
+    const noteEl = document.getElementById('campaignExistingNote');
+    document.getElementById('campaignPwSection').style.display = existing ? 'none' : '';
+    document.getElementById('campaignSendBtn').style.display = '';
+    document.getElementById('campaignSuccessText').textContent = 'Login credentials are ready to send.';
+    if (existing) {
+        noteEl.innerHTML = `<p>This client already has a login, so their password stays the same.</p>` +
+            (known.campaign_name ? `<p>Current campaign: <strong>${esc(known.campaign_name)}</strong>. The new campaign becomes their active one.</p>` : `<p>They have no campaign yet.</p>`);
+        noteEl.style.display = 'block';
+    } else { noteEl.style.display = 'none'; noteEl.innerHTML = ''; }
     document.getElementById('campaignClientInfo').innerHTML = `<p>Client: <strong>${esc(name)}</strong></p><p>Email: <strong>${esc(email)}</strong></p>`;
     document.getElementById('campaignForm').style.display = 'block';
     document.getElementById('campaignSuccess').style.display = 'none';
@@ -1811,7 +1827,8 @@ async function submitCampaign() {
     const start = document.getElementById('campaignStart').value;
     const end = document.getElementById('campaignEnd').value;
     const customPw = document.getElementById('customPw').value.trim();
-    const password = customPw || document.getElementById('generatedPw').textContent;
+    const existingClient = !!(currentClient && currentClient.existing);
+    const password = existingClient ? '' : (customPw || document.getElementById('generatedPw').textContent);
     const msgBox = document.getElementById('campaignMsgBox');
     if (!name||!budget||!views||!start||!end) { showModalMsg(msgBox,'Please fill in all fields.','error'); return; }
     document.getElementById('createCampaignBtn').disabled = true;
@@ -1826,7 +1843,11 @@ async function submitCampaign() {
                 <div class="creds-row"><span class="creds-label">Campaign ID</span><span class="creds-value">${esc(data.campaign_id)}</span></div>
                 <div class="creds-row"><span class="creds-label">Campaign</span><span class="creds-value">${esc(name)}</span></div>
                 <div class="creds-row"><span class="creds-label">Email</span><span class="creds-value">${esc(currentClient.email)}</span></div>
-                <div class="creds-row"><span class="creds-label">Password</span><span class="creds-value">${esc(password)}</span></div>`;
+                <div class="creds-row"><span class="creds-label">Password</span><span class="creds-value">${existingClient ? 'Unchanged (existing password)' : esc(password)}</span></div>`;
+            if (existingClient) {
+                document.getElementById('campaignSendBtn').style.display = 'none';
+                document.getElementById('campaignSuccessText').textContent = 'The client already has a login. They will see this campaign the next time they open their dashboard.';
+            }
             document.getElementById('campaignSuccess').style.display = 'block';
         } else { showModalMsg(msgBox, data.message||'Error.', 'error'); }
     } catch { showModalMsg(msgBox,'Connection error.','error'); }

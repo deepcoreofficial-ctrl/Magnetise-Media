@@ -931,36 +931,43 @@ def admin_create_campaign():
     views = data.get('target_views')
     start = data.get('start_date')
     end = data.get('expected_end_date')
-    password = data.get('password')
+    password = data.get('password') or ''
 
-    if not all([client_email, campaign_name, budget, views, start, password]):
+    # The password is only needed for a brand-new client. A client who already has
+    # a login keeps their password, so the form may leave it empty.
+    if not all([client_email, campaign_name, budget, views, start]):
         return jsonify({'success': False, 'message': 'All fields required'}), 400
     end = end or None   # end date optional; shows "---" until the campaign ends
 
-    password_hash = pbkdf2_sha256.hash(password)
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT password_hash FROM users WHERE email=%s", (client_email,))
+    existing = cur.fetchone()
+    if not existing:
+        cur.close()
+        return jsonify({'success': False, 'message': 'Client not found'}), 404
+    has_password = bool(existing.get('password_hash'))
+    if not has_password and not password:
+        cur.close()
+        return jsonify({'success': False, 'message': 'A password is required for a new client'}), 400
 
     # Short ID (15 chars) so it fits the existing campaigns.campaign_id column;
     # random hex suffix prevents collisions. e.g. CX-260524F3A9C1
     import secrets
     campaign_id = 'CX-' + datetime.now().strftime('%y%m%d') + secrets.token_hex(3).upper()
 
-    cur = mysql.connection.cursor()
     try:
         cur.execute("""INSERT INTO campaigns
                        (campaign_id, client_email, campaign_name, budget_total, target_views, start_date, expected_end_date, status, created_by)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s)""",
                     (campaign_id, client_email, campaign_name, budget, views, start, end, session['admin_email']))
-        # Only set password if this is first campaign (no existing hash)
-        cur.execute("SELECT password_hash FROM users WHERE email=%s", (client_email,))
-        existing = cur.fetchone()
-        if existing and existing['password_hash']:
-            # Repeat client — keep existing password, just update active campaign
+        if has_password:
+            # Repeat client: keep the existing password, just make this the active campaign
             cur.execute("UPDATE users SET account_status='ACTIVE', campaign_id=%s WHERE email=%s",
                         (campaign_id, client_email))
         else:
-            # First campaign — set password
+            # First campaign: set the password
             cur.execute("UPDATE users SET account_status='ACTIVE', password_hash=%s, campaign_id=%s WHERE email=%s",
-                        (password_hash, campaign_id, client_email))
+                        (pbkdf2_sha256.hash(password), campaign_id, client_email))
         mysql.connection.commit()
     except Exception as e:
         mysql.connection.rollback()
