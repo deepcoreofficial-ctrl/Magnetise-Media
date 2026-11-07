@@ -1759,7 +1759,8 @@ def admin_appeals_resolve():
     if decision not in ('approved', 'rejected'):
         return jsonify({'success': False, 'message': 'decision must be approved/rejected'}), 400
     cur = mysql.connection.cursor()
-    cur.execute("SELECT campaign_id, clip_url FROM appeals WHERE id=%s AND status='open'", (appeal_id,))
+    cur.execute("""SELECT campaign_id, clip_url, desired_status, clipper_name, platform, client_email
+                   FROM appeals WHERE id=%s AND status='open'""", (appeal_id,))
     ap = cur.fetchone()
     if not ap:
         cur.close(); return jsonify({'success': False, 'message': 'Appeal not found or already resolved'}), 404
@@ -1775,6 +1776,18 @@ def admin_appeals_resolve():
                 (ap['campaign_id'], ap['clip_url'], decision, reason or None))
     cur.execute("UPDATE appeals SET status='resolved', decision=%s, resolved_by=%s, resolved_at=NOW() WHERE id=%s",
                 (decision, who, appeal_id))
+    # ---- notifications ----
+    accepted = (decision == (ap.get('desired_status') or '').strip().lower())
+    verdict = 'accepted' if accepted else 'declined'
+    cl = ap.get('clipper_name') or 'a clipper'
+    plat = ap.get('platform') or '-'
+    extra = f" Reason: {reason}" if reason else ""
+    notify(cur, ap.get('client_email'), 'client', 'appeal_result', f"Appeal {verdict}",
+           f"Your appeal for the clip by {cl} ({plat}) was {verdict}. The clip is now {decision}.{extra}", 'clips')
+    actor = (eff_admin().get('email') or '').lower()
+    team_msg = f"{who} {verdict} an appeal on the clip by {cl} ({plat}). The clip is now {decision}.{extra}"
+    for r in _admin_recipients(cur, ap['campaign_id']):
+        notify(cur, r, 'admin', 'appeal_result', f"Appeal {verdict}", team_msg, 'appeals', skip=actor)
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
@@ -1808,8 +1821,20 @@ def admin_permit_request():
     cur = mysql.connection.cursor()
     if not can_access_campaign(cur, campaign_id):
         cur.close(); return jsonify({'success': False}), 403
+    cur.execute("SELECT id FROM permits WHERE campaign_id=%s AND action=%s AND manager_email=%s AND status='pending' LIMIT 1",
+                (campaign_id, action, a['email']))
+    if cur.fetchone():
+        cur.close()
+        return jsonify({'success': False, 'message': 'You already have a pending request for this campaign'}), 400
     cur.execute("INSERT INTO permits (campaign_id, manager_email, action, note) VALUES (%s,%s,%s,%s)",
                 (campaign_id, a['email'], action, note))
+    cur.execute("SELECT campaign_name FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+    cname = ((cur.fetchone() or {}).get('campaign_name')) or campaign_id
+    label = 'end the campaign' if action == 'complete_campaign' else action.replace('_', ' ')
+    msg = f"{a.get('name') or a['email']} asked to {label}: {cname}."
+    if note:
+        msg += f" Note: {note}"
+    notify(cur, ADMIN_EMAIL, 'admin', 'permit_request', 'New permit request', msg, 'permits')
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
@@ -1841,8 +1866,9 @@ def admin_permit_resolve():
     data = request.get_json()
     pid = data.get('id')
     approve = bool(data.get('approve'))
+    reason = (data.get('reason') or '').strip()
     cur = mysql.connection.cursor()
-    cur.execute("SELECT campaign_id, action, status FROM permits WHERE id=%s", (pid,))
+    cur.execute("SELECT campaign_id, action, status, manager_email FROM permits WHERE id=%s", (pid,))
     p = cur.fetchone()
     if not p or p['status'] != 'pending':
         cur.close(); return jsonify({'success': False, 'message': 'Not found or already resolved'}), 404
@@ -1854,9 +1880,25 @@ def admin_permit_resolve():
         cur.execute("UPDATE permits SET status='approved', resolved_by=%s, resolved_at=NOW() WHERE id=%s", (who, pid))
     else:
         cur.execute("UPDATE permits SET status='denied', resolved_by=%s, resolved_at=NOW() WHERE id=%s", (who, pid))
+    if reason:
+        try:
+            cur.execute("UPDATE permits SET decision_note=%s WHERE id=%s", (reason, pid))
+        except Exception:
+            pass
+    cur.execute("SELECT campaign_name FROM campaigns WHERE campaign_id=%s", (p['campaign_id'],))
+    cname = ((cur.fetchone() or {}).get('campaign_name')) or p['campaign_id']
+    label = 'end the campaign' if p['action'] == 'complete_campaign' else str(p['action']).replace('_', ' ')
+    if approve:
+        title, msg = 'Request approved', f"Your request to {label} for {cname} was approved."
+    else:
+        title, msg = 'Request denied', f"Your request to {label} for {cname} was denied."
+        if reason:
+            msg += f" Reason: {reason}"
+    notify(cur, p.get('manager_email'), 'admin', 'permit_result', title, msg, 'mycampaigns')
     mysql.connection.commit()
     cur.close()
     return jsonify({'success': True})
+
 
 @app.route('/api/admin/report/set', methods=['POST'])
 def admin_report_set():
@@ -2550,7 +2592,7 @@ def dashboard_appeal():
     email = session['user_email']
     cur = mysql.connection.cursor()
     try:
-        cur.execute("SELECT campaign_id FROM users WHERE email=%s", (email,))
+        cur.execute("SELECT campaign_id, full_name FROM users WHERE email=%s", (email,))
         u = cur.fetchone()
         if not u or not u['campaign_id']:
             cur.close(); return jsonify({'success': False, 'message': 'No campaign'}), 400
@@ -2571,6 +2613,16 @@ def dashboard_appeal():
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (cid, clip_url, clip.get('clipper_name'), clip.get('platform'), clip.get('status'),
                      desired, reason, email, datetime.now() + timedelta(hours=48)))
+        # ---- notifications ----
+        cl = clip.get('clipper_name') or 'a clipper'
+        plat = clip.get('platform') or '-'
+        msg = f"{u.get('full_name') or email} appealed the clip by {cl} ({plat}) and wants it {desired}."
+        if reason:
+            msg += f" Reason: {reason}"
+        for r in _admin_recipients(cur, cid):
+            notify(cur, r, 'admin', 'appeal_new', 'New clip appeal', msg, 'appeals')
+        notify(cur, email, 'client', 'appeal_sent', 'Appeal submitted',
+               f"We received your appeal for the clip by {cl} ({plat}). The answer will appear here.", 'clips')
         mysql.connection.commit()
         cur.close()
         return jsonify({'success': True})
@@ -3092,6 +3144,158 @@ def reset_password():
 
     return jsonify({'success': True})
 
+_NF_READY = False
+
+def ensure_notifications_table():
+    """Create the notifications table (and permits.decision_note) once.
+    Safe to call many times; retries later if the database was down at startup."""
+    global _NF_READY
+    if _NF_READY:
+        return
+    try:
+        with app.app_context():
+            cur = mysql.connection.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    recipient_email VARCHAR(255) NOT NULL,
+                    audience VARCHAR(10) NOT NULL,
+                    type VARCHAR(40),
+                    title VARCHAR(255),
+                    message TEXT,
+                    link VARCHAR(100),
+                    is_read TINYINT DEFAULT 0,
+                    created_at DATETIME DEFAULT NOW(),
+                    INDEX idx_recipient (recipient_email, audience, is_read)
+                )
+            """)
+            try:
+                cur.execute("ALTER TABLE permits ADD COLUMN decision_note TEXT")
+            except Exception:
+                pass   # column already exists
+            mysql.connection.commit()
+            cur.close()
+        _NF_READY = True
+    except Exception as e:
+        print(f"notifications table init skipped: {e}")
+
+try:
+    ensure_notifications_table()
+except Exception:
+    pass
+
+def notify(cur, recipient, audience, ntype, title, message, link=None, skip=None):
+    """Add one notification. Uses the caller's cursor so it is saved together with
+    the action that caused it. 'audience' is 'admin' (admin panel) or 'client'.
+    Never raises: a notification problem must not break the real action."""
+    r = (recipient or '').strip().lower()
+    if not r or (skip and r == (skip or '').strip().lower()):
+        return
+    try:
+        cur.execute("""INSERT INTO notifications (recipient_email, audience, type, title, message, link)
+                       VALUES (%s,%s,%s,%s,%s,%s)""",
+                    (r, audience, ntype, (title or '')[:255], message, link))
+    except Exception as e:
+        app.logger.error("notify failed: %s", e)
+
+def _admin_recipients(cur, campaign_id):
+    """Super admin + the manager assigned to this campaign (if there is one)."""
+    out = []
+    if ADMIN_EMAIL:
+        out.append(ADMIN_EMAIL.strip().lower())
+    try:
+        cur.execute("SELECT assigned_admin_email FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+        row = cur.fetchone()
+        m = ((row or {}).get('assigned_admin_email') or '').strip().lower()
+        if m and m not in out:
+            out.append(m)
+    except Exception as e:
+        app.logger.error("admin recipients lookup failed: %s", e)
+    return out
+
+def _nf_recipient(scope):
+    """Who is asking? Returns (email, audience) or ('', '') when not logged in."""
+    if scope == 'client':
+        e = (session.get('user_email') or '').strip().lower()
+        return (e, 'client') if e else ('', '')
+    if scope == 'admin' and session.get('admin_logged_in'):
+        e = (eff_admin().get('email') or '').strip().lower()
+        return (e, 'admin') if e else ('', '')
+    return ('', '')
+
+def _nf_read_only_preview(aud):
+    """A super admin previewing a manager/client must not clear THEIR unread badge."""
+    return (aud == 'admin' and bool(session.get('acting_as_email'))) or \
+           (aud == 'client' and bool(session.get('impersonator_email')))
+
+@app.route('/api/notifications')
+@limiter.exempt
+def notifications_list():
+    who, aud = _nf_recipient(request.args.get('scope', ''))
+    if not who:
+        return jsonify({'success': False}), 401
+    ensure_notifications_table()
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("""SELECT id, type, title, message, link, is_read, UNIX_TIMESTAMP(created_at) AS ts
+                       FROM notifications WHERE recipient_email=%s AND audience=%s
+                       ORDER BY id DESC LIMIT 40""", (who, aud))
+        rows = cur.fetchall()
+        cur.execute("SELECT COUNT(*) AS c FROM notifications WHERE recipient_email=%s AND audience=%s AND is_read=0",
+                    (who, aud))
+        unread = int((cur.fetchone() or {}).get('c') or 0)
+        cur.close()
+    except Exception as e:
+        app.logger.error("notifications list failed: %s", e)
+        return jsonify({'success': True, 'items': [], 'unread': 0})
+    for r in rows:
+        r['ts'] = int(r.get('ts') or 0)
+        r['is_read'] = bool(r.get('is_read'))
+    return jsonify({'success': True, 'items': rows, 'unread': unread})
+
+@app.route('/api/notifications/read', methods=['POST'])
+@limiter.exempt
+def notifications_mark_read():
+    data = request.get_json() or {}
+    who, aud = _nf_recipient(data.get('scope', ''))
+    if not who:
+        return jsonify({'success': False}), 401
+    if _nf_read_only_preview(aud):
+        return jsonify({'success': True})
+    try:
+        nid = int(data.get('id'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'id required'}), 400
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE notifications SET is_read=1 WHERE id=%s AND recipient_email=%s AND audience=%s",
+                    (nid, who, aud))
+        mysql.connection.commit()
+        cur.close()
+    except Exception as e:
+        app.logger.error("notification read failed: %s", e)
+        return jsonify({'success': False}), 500
+    return jsonify({'success': True})
+
+@app.route('/api/notifications/read-all', methods=['POST'])
+@limiter.exempt
+def notifications_mark_all_read():
+    data = request.get_json() or {}
+    who, aud = _nf_recipient(data.get('scope', ''))
+    if not who:
+        return jsonify({'success': False}), 401
+    if _nf_read_only_preview(aud):
+        return jsonify({'success': True})
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE notifications SET is_read=1 WHERE recipient_email=%s AND audience=%s AND is_read=0",
+                    (who, aud))
+        mysql.connection.commit()
+        cur.close()
+    except Exception as e:
+        app.logger.error("notification read-all failed: %s", e)
+        return jsonify({'success': False}), 500
+    return jsonify({'success': True})
 
 # ==========================================
 # SECURITY HEADERS

@@ -1449,5 +1449,103 @@ async function handleLogout(){
 document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
 init();
 </script>
+<!-- ===== Notifications bell (added) ===== -->
+<style>
+#nfBell{position:fixed;top:14px;right:18px;z-index:1200;width:40px;height:40px;border-radius:12px;background:#141414;border:1px solid rgba(255,255,255,0.14);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+#nfBell:hover{border-color:rgba(255,255,255,0.35);}
+#nfBell svg{width:19px;height:19px;}
+#nfBadge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff4d4d;color:#fff;font-size:11px;font-weight:700;display:none;align-items:center;justify-content:center;font-family:inherit;}
+#nfPanel{position:fixed;top:62px;right:18px;z-index:1200;width:370px;max-width:calc(100vw - 24px);max-height:70vh;overflow:auto;background:#141414;border:1px solid rgba(255,255,255,0.14);border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,0.6);display:none;font-family:inherit;}
+#nfPanel .nf-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;background:#141414;}
+#nfPanel .nf-head b{color:#fff;font-size:14px;}
+#nfPanel .nf-head button{background:none;border:none;color:#9a9a9a;font-size:12px;cursor:pointer;font-family:inherit;}
+#nfPanel .nf-head button:hover{color:#fff;}
+#nfPanel .nf-item{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;border-left:3px solid transparent;}
+#nfPanel .nf-item:hover{background:rgba(255,255,255,0.04);}
+#nfPanel .nf-item.unread{background:rgba(255,255,255,0.05);border-left-color:#fff;}
+#nfPanel .nf-title{color:#fff;font-size:13px;font-weight:700;margin-bottom:3px;}
+#nfPanel .nf-msg{color:#b5b5b5;font-size:12.5px;line-height:1.5;word-break:break-word;}
+#nfPanel .nf-time{color:#6f6f6f;font-size:11px;margin-top:5px;}
+#nfPanel .nf-empty{color:#777;font-size:13px;text-align:center;padding:34px 16px;}
+</style>
+<button id="nfBell" type="button" aria-label="Notifications" title="Notifications">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    <span id="nfBadge"></span>
+</button>
+<div id="nfPanel">
+    <div class="nf-head"><b>Notifications</b><button type="button" id="nfReadAll">Mark all as read</button></div>
+    <div id="nfList"></div>
+</div>
+<script>
+(function(){
+    const SCOPE='client';
+    let items=[], unread=0;
+    const $=id=>document.getElementById(id);
+    const h=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function ago(ts){
+        if(!ts) return '';
+        const s=Math.max(0,Math.floor(Date.now()/1000-ts));
+        if(s<60) return 'just now';
+        if(s<3600) return Math.floor(s/60)+' min ago';
+        if(s<86400) return Math.floor(s/3600)+' h ago';
+        return new Date(ts*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+    }
+    function drawBadge(){
+        const b=$('nfBadge'); if(!b) return;
+        if(unread>0){b.textContent=unread>99?'99+':unread;b.style.display='flex';}else{b.style.display='none';}
+    }
+    function drawList(){
+        const box=$('nfList'); if(!box) return;
+        if(!items.length){box.innerHTML='<div class="nf-empty">No notifications yet.</div>';return;}
+        box.innerHTML=items.map(n=>`<div class="nf-item ${n.is_read?'':'unread'}" data-id="${n.id}" data-link="${h(n.link||'')}">
+            <div class="nf-title">${h(n.title)}</div><div class="nf-msg">${h(n.message)}</div><div class="nf-time">${h(ago(n.ts))}</div></div>`).join('');
+    }
+    async function load(){
+        try{
+            const r=await fetch('/api/notifications?scope='+SCOPE);
+            if(!r.ok) return;
+            const d=await r.json(); if(!d.success) return;
+            items=d.items||[]; unread=d.unread||0;
+            drawBadge();
+            if($('nfPanel').style.display==='block') drawList();
+        }catch(e){}
+    }
+    function post(url,body){
+        return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({scope:SCOPE},body||{}))}).catch(()=>{});
+    }
+    function go(link){
+        if(!link||typeof showPage!=='function') return;
+        try{
+            const el=document.getElementById('nav-'+link);
+            if(SCOPE==='client'){ if(el) showPage(link,el); }
+            else showPage(link,el||null);
+        }catch(e){}
+    }
+    $('nfBell').addEventListener('click',e=>{
+        e.stopPropagation();
+        const p=$('nfPanel');
+        if(p.style.display==='block'){p.style.display='none';return;}
+        p.style.display='block'; drawList(); load();
+    });
+    $('nfPanel').addEventListener('click',e=>{
+        e.stopPropagation();
+        const it=e.target.closest('.nf-item'); if(!it) return;
+        const id=Number(it.dataset.id), link=it.dataset.link;
+        const n=items.find(x=>x.id===id);
+        if(n&&!n.is_read){n.is_read=true; unread=Math.max(0,unread-1); drawBadge(); drawList(); post('/api/notifications/read',{id});}
+        $('nfPanel').style.display='none';
+        go(link);
+    });
+    $('nfReadAll').addEventListener('click',()=>{
+        items.forEach(n=>n.is_read=true); unread=0; drawBadge(); drawList(); post('/api/notifications/read-all');
+    });
+    document.addEventListener('click',()=>{const p=$('nfPanel'); if(p) p.style.display='none';});
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden) load();});
+    load();
+    setInterval(()=>{if(!document.hidden) load();},60000);
+})();
+</script>
+<!-- ===== /Notifications bell ===== -->
+
 </body>
 </html>
