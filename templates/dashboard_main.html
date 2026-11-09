@@ -814,6 +814,7 @@ function renderDashboard(d){
     loadTopClips();
     loadLeaderboard();
     loadPlatformBreakdown();
+    setTimeout(loadEngagementRate,0);
     loadWeeklyMilestones();
 }
 
@@ -866,10 +867,11 @@ async function loadPlatformBreakdown(){
         const data=await res.json();
         if(!data.success||!data.breakdown||data.breakdown.length===0) return;
         document.getElementById('platformSection').style.display='';
-        const COLORS={'TikTok':'#69C9D0','YouTube':'#FF4444','Reels':'#E1306C','Shorts':'#FF6B35','Instagram':'#E1306C'};
+        const COLORS={'tiktok':'#69C9D0','tt':'#69C9D0','youtube':'#FF4444','yt':'#FF4444','reels':'#E1306C','instagram':'#E1306C','ig':'#E1306C','shorts':'#FF6B35'};
+        const FALLBACK=['#22c55e','#f59e0b','#8b5cf6','#38bdf8','#f472b6'];
         const labels=data.breakdown.map(r=>r.platform||'Other');
-        const values=data.breakdown.map(r=>r.total_views||0);
-        const colors=labels.map(l=>COLORS[l]||'#888');
+        const values=data.breakdown.map(r=>Number(r.total_views)||0);
+        const colors=labels.map((l,i)=>COLORS[String(l).trim().toLowerCase()]||FALLBACK[i%FALLBACK.length]);
         const ctx=document.getElementById('platformChart').getContext('2d');
         new Chart(ctx,{
             type:'doughnut',
@@ -939,7 +941,7 @@ async function loadViewsGraph(days=7){
         _viewsChart=new Chart(context,{
             type:'line',
             data:{labels,datasets:[{label:'Views',data:values,borderColor:'#ffffff',backgroundColor:gradient,borderWidth:2.5,pointBackgroundColor:'#fff',pointBorderColor:'rgba(255,255,255,0.4)',pointBorderWidth:2,pointRadius:5,pointHoverRadius:7,pointHoverBackgroundColor:'#000',pointHoverBorderColor:'#fff',tension:0.4,fill:true}]},
-            options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,callbacks:{label:ctx=>'Views: '+Number(ctx.raw).toLocaleString()}}},scales:{x:{ticks:{color:'#555',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},y:{min:0,max:history.length>1?(tv||undefined):undefined,ticks:{color:'#555',font:{size:11},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'},title:{display:tv>0,text:'Target: '+Number(tv).toLocaleString(),color:'rgba(255,255,255,0.3)',font:{size:10}}}}}
+            options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,callbacks:{label:ctx=>'Views: '+Number(ctx.raw).toLocaleString()}}},scales:{x:{ticks:{color:'#555',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},y:{ticks:{color:'#555',font:{size:11},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}}}}
         });
     }catch(e){}
 }
@@ -991,6 +993,30 @@ function copyTrackLink(){
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(inp.value).then(done).catch(()=>{inp.select();document.execCommand('copy');done();});}
     else{inp.select();document.execCommand('copy');done();}
 }
+/* Link-click graph: running total over time, empty hours/days filled with the previous total so the line
+   rises like the Performance Graph instead of showing lonely dots. */
+function _linkBuckets(series,days){
+    const step=days===1?3600:86400;
+    const now=Math.floor(Date.now()/1000);
+    const end=Math.floor(now/step)*step;
+    let start;
+    if(days) start=end-(days===1?23:days-1)*step;
+    else if(series.length) start=Math.min(...series.map(p=>p.ts));
+    else start=end-6*step;
+    const by={};series.forEach(p=>{by[p.ts]=p;});
+    let c=0,u=0;const out=[];
+    // clicks that happened before the first bucket shown are not in `series`, so the total starts at 0
+    for(let t=start;t<=end;t+=step){const p=by[t];if(p){c+=p.clicks;u+=p.unique;}out.push({ts:t,clicks:c,unique:u});}
+    return out;
+}
+async function loadEngagementRate(){
+    const el=document.getElementById('engRateVal'); if(!el) return;
+    try{
+        const r=await (await fetch('/api/dashboard/engagement')).json();
+        if(!r.success){el.textContent='—';return;}
+        el.textContent=r.rate.toFixed(2)+'%  ('+Number(r.interactions).toLocaleString()+' likes, comments & shares)';
+    }catch(e){el.textContent='—';}
+}
 async function loadLinkClicks(days=7){
     const body=document.getElementById('linkClicksBody'); if(!body) return;
     try{
@@ -1010,19 +1036,29 @@ async function loadLinkClicks(days=7){
                 <div class="stat-card"><div class="stat-label">Conversion</div><div class="stat-value amber">${d.conversion}%</div></div>
             </div>
             <div style="color:#777;font-size:12px;text-align:center;margin-bottom:14px;line-height:1.6;">Clicks and people are for ${period}; total views and conversion are all time.<br>People who tapped your campaign link and landed on <strong style="color:#bbb;">${esc(d.destination||'your page')}</strong>. Each person is counted once. Conversion = people who clicked &divide; total views.</div>
-            ${(d.series||[]).length?'<canvas id="linkClicksChart"></canvas>':'<div class="no-graph">No clicks in this period yet.</div>'}
+            <canvas id="linkClicksChart"></canvas>
             <div style="margin-top:18px;"><div class="stat-label" style="margin-bottom:6px;">Where clicks came from</div>${srcRows}</div>
             ${d.link?`<div style="margin-top:18px;"><div class="stat-label" style="margin-bottom:6px;">Your campaign link</div>
                 <div style="display:flex;gap:8px;"><input id="trackLinkInput" readonly value="${esc(d.link)}" onclick="this.select()" style="flex:1;min-width:0;background:#101010;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;"/><button class="tf-btn" id="trackCopyBtn" onclick="copyTrackLink()">Copy</button></div>
                 <div style="color:#666;font-size:12px;margin-top:6px;">Our clippers put this link in their captions and bio. Everyone who taps it is counted and sent to your page.</div></div>`:''}`;
-        if((d.series||[]).length&&typeof Chart!=='undefined'){
+        if(typeof Chart!=='undefined'){
             const cv=document.getElementById('linkClicksChart');
-            _linkChart=new Chart(cv.getContext('2d'),{
+            const pts=_linkBuckets(d.series||[],days);
+            const ctx=cv.getContext('2d');
+            const gClicks=ctx.createLinearGradient(0,0,0,cv.offsetHeight||240);
+            gClicks.addColorStop(0,'rgba(255,255,255,0.18)');gClicks.addColorStop(0.5,'rgba(255,255,255,0.06)');gClicks.addColorStop(1,'rgba(255,255,255,0)');
+            const ptBase={pointBorderWidth:2,pointRadius:pts.length>16?3:5,pointHoverRadius:7,tension:0.4};
+            _linkChart=new Chart(ctx,{
                 type:'line',
-                data:{labels:d.series.map(p=>_histLabel(p,days)),datasets:[
-                    {label:'Clicks',data:d.series.map(p=>p.clicks),borderColor:'#ffffff',backgroundColor:'rgba(255,255,255,0.08)',fill:true,tension:0.35,borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#fff'},
-                    {label:'New people',data:d.series.map(p=>p.unique),borderColor:'#22c55e',backgroundColor:'transparent',tension:0.35,borderWidth:2,pointRadius:3,pointBackgroundColor:'#22c55e'}]},
-                options:{responsive:true,plugins:{legend:{display:true,labels:{color:'#888',boxWidth:12}}},scales:{x:{ticks:{color:'#555'},grid:{color:'rgba(255,255,255,0.04)'}},y:{beginAtZero:true,ticks:{color:'#555',precision:0},grid:{color:'rgba(255,255,255,0.04)'}}}}
+                data:{labels:pts.map(p=>_histLabel(p,days)),datasets:[
+                    {label:'Clicks',data:pts.map(p=>p.clicks),borderColor:'#ffffff',backgroundColor:gClicks,fill:true,borderWidth:2.5,pointBackgroundColor:'#fff',pointBorderColor:'rgba(255,255,255,0.4)',...ptBase},
+                    {label:'People',data:pts.map(p=>p.unique),borderColor:'#22c55e',backgroundColor:'transparent',fill:false,borderWidth:2.5,pointBackgroundColor:'#22c55e',pointBorderColor:'rgba(34,197,94,0.4)',...ptBase}]},
+                options:{responsive:true,interaction:{mode:'index',intersect:false},
+                    plugins:{legend:{display:true,labels:{color:'#888',boxWidth:12}},
+                        tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,
+                            callbacks:{label:c=>c.dataset.label+' (total so far): '+Number(c.raw).toLocaleString()}}},
+                    scales:{x:{ticks:{color:'#555',font:{size:11},maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},
+                            y:{min:0,ticks:{color:'#555',font:{size:11},precision:0,callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}}}}
             });
         }
     }catch(e){body.innerHTML='<div class="no-graph">Could not load link clicks.</div>';}
@@ -1096,7 +1132,7 @@ async function loadClipsPage(){
                             <span class="clip-status ${st}">${esc(st)}</span>
                         </div>
                         <div style="font-size:12px;color:#555;margin-top:6px;">${esc(c.clipper_name||'—')} · ${Number(c.views||0).toLocaleString()} views · ${esc((c.added_at||'').slice(0,10))}</div>
-                        ${(c.likes||c.comments||c.shares)?`<div style="font-size:11px;color:#666;margin-top:3px;">${Number(c.likes||0).toLocaleString()} likes · ${Number(c.comments||0).toLocaleString()} comments${c.shares?(' · '+Number(c.shares).toLocaleString()+' shares'):''}</div>`:''}
+                        ${(c.likes||c.comments||c.shares)?`<div style="font-size:11px;color:#666;margin-top:3px;">${Number(c.likes||0).toLocaleString()} likes · ${Number(c.comments||0).toLocaleString()} comments${c.shares?(' · '+Number(c.shares).toLocaleString()+' shares'):''}${c.views>0?(' · '+(((Number(c.likes||0)+Number(c.comments||0)+Number(c.shares||0))/c.views)*100).toFixed(2)+'% engagement'):''}</div>`:''}
                         ${c.reviewed_by?`<div style="font-size:11px;color:#666;margin-top:3px;">${st==='rejected'?'Rejected':'Approved'} by ${esc(c.reviewed_by)}${(st==='rejected'&&c.reject_reason)?(' — '+esc(c.reject_reason)):''}</div>`:''}
                     </div>
                     <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -1268,6 +1304,11 @@ async function renderAnalytics(d){
                     <div class="info-row">
                         <span class="info-key">Current Views</span>
                         <span class="info-val">${Number(cv).toLocaleString()}</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-key">Engagement Rate</span>
+                        <span class="info-val" id="engRateVal">…</span>
                     </div>
 
                     <div class="info-row" style="border-bottom:none;">
@@ -1561,7 +1602,7 @@ init();
         const box=$('nfList'); if(!box) return;
         if(!items.length){box.innerHTML='<div class="nf-empty">No notifications yet.</div>';return;}
         box.innerHTML=items.map(n=>`<div class="nf-item ${n.is_read?'':'unread'}" data-id="${n.id}" data-link="${h(n.link||'')}">
-            <div class="nf-title">${h(n.title)}</div><div class="nf-msg">${h(n.message)}</div><div class="nf-time">${h(ago(n.ts))}</div></div>`).join('');
+            <div class="nf-title">${h(n.title)}</div><div class="nf-msg">${h(n.message).replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:#7dd3fc;word-break:break-all;">$1</a>')}</div><div class="nf-time">${h(ago(n.ts))}</div></div>`).join('');
     }
     async function load(){
         try{

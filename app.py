@@ -1790,9 +1790,9 @@ def admin_appeals_resolve():
     plat = ap.get('platform') or '-'
     extra = f" Reason: {reason}" if reason else ""
     notify(cur, ap.get('client_email'), 'client', 'appeal_result', f"Appeal {verdict}",
-           f"Your appeal for the clip by {cl} ({plat}) was {verdict}. The clip is now {decision}.{extra}", 'clips')
+           f"Your appeal for the clip by {cl} ({plat}) was {verdict}. The clip is now {decision}.{extra} Clip: {ap.get('clip_url') or '-'}", 'clips')
     actor = (eff_admin().get('email') or '').lower()
-    team_msg = f"{who} {verdict} an appeal on the clip by {cl} ({plat}). The clip is now {decision}.{extra}"
+    team_msg = f"{who} {verdict} an appeal on the clip by {cl} ({plat}). The clip is now {decision}.{extra} Clip: {ap.get('clip_url') or '-'}"
     for r in _admin_recipients(cur, ap['campaign_id']):
         notify(cur, r, 'admin', 'appeal_result', f"Appeal {verdict}", team_msg, 'appeals', skip=actor)
     mysql.connection.commit()
@@ -2508,13 +2508,35 @@ def dashboard_leaderboard():
         cur.close()
         return jsonify({'success': True, 'leaderboard': []})
     cur.execute("""
-        SELECT clipper_name, platform, views
+        SELECT clipper_name,
+               GROUP_CONCAT(DISTINCT platform ORDER BY platform SEPARATOR ' / ') AS platform,
+               CAST(SUM(views) AS UNSIGNED) AS views
         FROM top_clips WHERE campaign_id=%s AND status='approved'
+        GROUP BY clipper_name
         ORDER BY views DESC LIMIT 10
     """, (user['campaign_id'],))
     rows = cur.fetchall()
     cur.close()
     return jsonify({'success': True, 'leaderboard': rows})
+
+@app.route('/api/dashboard/engagement')
+def dashboard_engagement():
+    """Overall engagement rate of the client's approved clips = (likes+comments+shares) / views."""
+    if 'user_email' not in session:
+        return jsonify({'success': False}), 401
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM users WHERE email=%s", (session['user_email'],))
+    user = cur.fetchone()
+    if not user or not user['campaign_id']:
+        cur.close()
+        return jsonify({'success': True, 'rate': 0.0, 'views': 0, 'interactions': 0})
+    cur.execute("""SELECT COALESCE(SUM(views),0) AS v,
+                          COALESCE(SUM(COALESCE(likes,0)+COALESCE(comments,0)+COALESCE(shares,0)),0) AS i
+                   FROM top_clips WHERE campaign_id=%s AND status='approved'""", (user['campaign_id'],))
+    r = cur.fetchone() or {}
+    cur.close()
+    v, i = int(r.get('v') or 0), int(r.get('i') or 0)
+    return jsonify({'success': True, 'rate': round(i / v * 100, 2) if v else 0.0, 'views': v, 'interactions': i})
 
 @app.route('/api/dashboard/platform-breakdown')
 def dashboard_platform_breakdown():
@@ -2527,7 +2549,7 @@ def dashboard_platform_breakdown():
         cur.close()
         return jsonify({'success': True, 'breakdown': []})
     cur.execute("""
-        SELECT platform, SUM(views) as total_views, COUNT(*) as clip_count
+        SELECT platform, CAST(SUM(views) AS UNSIGNED) as total_views, COUNT(*) as clip_count
         FROM top_clips WHERE campaign_id=%s AND status='approved'
         GROUP BY platform ORDER BY total_views DESC
     """, (user['campaign_id'],))
