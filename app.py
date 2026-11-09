@@ -149,6 +149,20 @@ def create_tables():
                     INDEX idx_campaign (campaign_id)
                 )
             """)
+            # Social accounts managed by admins for each client.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS client_accounts (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    client_email VARCHAR(255) NOT NULL,
+                    platform VARCHAR(50) NOT NULL,
+                    account_username VARCHAR(255) NOT NULL,
+                    discord_username VARCHAR(255) NOT NULL,
+                    created_at DATETIME DEFAULT NOW(),
+                    updated_at DATETIME DEFAULT NOW(),
+                    INDEX idx_client_email (client_email),
+                    INDEX idx_discord_username (discord_username)
+                )
+            """)
             # Milestone emails tracker
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS milestone_emails_sent (
@@ -906,6 +920,97 @@ def admin_clients():
         if c.get('budget_total') is not None: c['budget_total'] = float(c['budget_total'])
         if c.get('cpm_rate') is not None: c['cpm_rate'] = float(c['cpm_rate'])
     return jsonify({'success': True, 'clients': clients})
+
+
+# ==========================================
+# CLIENT SOCIAL ACCOUNTS — ADMIN MANAGEMENT
+# ==========================================
+
+@app.route('/api/admin/client-accounts/<user_id>')
+def admin_get_client_accounts(user_id):
+    if not is_super():
+        return jsonify({'success': False, 'message': 'Not allowed'}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT email, full_name FROM users WHERE user_id=%s", (user_id,))
+    client = cur.fetchone()
+    if not client:
+        cur.close()
+        return jsonify({'success': False, 'message': 'Client not found'}), 404
+    cur.execute("""
+        SELECT id, platform, account_username, discord_username, created_at
+        FROM client_accounts WHERE client_email=%s ORDER BY created_at DESC, id DESC
+    """, (client['email'],))
+    accounts = cur.fetchall()
+    cur.close()
+    for account in accounts:
+        if account.get('created_at'):
+            account['created_at'] = str(account['created_at'])
+    return jsonify({'success': True, 'client': client, 'accounts': accounts})
+
+
+@app.route('/api/admin/client-accounts', methods=['POST'])
+def admin_create_client_account():
+    if not is_super():
+        return jsonify({'success': False, 'message': 'Not allowed'}), 403
+    data = request.get_json(silent=True) or {}
+    user_id = str(data.get('user_id') or '').strip()
+    platform = str(data.get('platform') or '').strip()
+    username = str(data.get('account_username') or '').strip().lstrip('@')
+    discord_username = str(data.get('discord_username') or '').strip().lstrip('@')
+    allowed_platforms = {'TikTok', 'Instagram', 'YouTube', 'X', 'Twitch', 'Facebook', 'Other'}
+    if not user_id or platform not in allowed_platforms or not username or not discord_username:
+        return jsonify({'success': False, 'message': 'Client, platform, account username and Discord username are required.'}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT email FROM users WHERE user_id=%s", (user_id,))
+    client = cur.fetchone()
+    if not client:
+        cur.close()
+        return jsonify({'success': False, 'message': 'Client not found'}), 404
+    try:
+        cur.execute("""
+            INSERT INTO client_accounts (client_email, platform, account_username, discord_username)
+            VALUES (%s,%s,%s,%s)
+        """, (client['email'], platform, username, discord_username))
+        mysql.connection.commit()
+        account_id = cur.lastrowid
+        cur.close()
+        return jsonify({'success': True, 'id': account_id})
+    except Exception as e:
+        mysql.connection.rollback()
+        cur.close()
+        app.logger.exception("Could not create client account")
+        return jsonify({'success': False, 'message': 'Could not save account.'}), 500
+
+
+@app.route('/api/admin/client-accounts/<int:account_id>', methods=['PUT', 'DELETE'])
+def admin_update_delete_client_account(account_id):
+    if not is_super():
+        return jsonify({'success': False, 'message': 'Not allowed'}), 403
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT id FROM client_accounts WHERE id=%s", (account_id,))
+    if not cur.fetchone():
+        cur.close()
+        return jsonify({'success': False, 'message': 'Account not found'}), 404
+    if request.method == 'DELETE':
+        cur.execute("DELETE FROM client_accounts WHERE id=%s", (account_id,))
+    else:
+        data = request.get_json(silent=True) or {}
+        platform = str(data.get('platform') or '').strip()
+        username = str(data.get('account_username') or '').strip().lstrip('@')
+        discord_username = str(data.get('discord_username') or '').strip().lstrip('@')
+        allowed_platforms = {'TikTok', 'Instagram', 'YouTube', 'X', 'Twitch', 'Facebook', 'Other'}
+        if platform not in allowed_platforms or not username or not discord_username:
+            cur.close()
+            return jsonify({'success': False, 'message': 'Platform, account username and Discord username are required.'}), 400
+        cur.execute("""
+            UPDATE client_accounts
+            SET platform=%s, account_username=%s, discord_username=%s, updated_at=NOW()
+            WHERE id=%s
+        """, (platform, username, discord_username, account_id))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True})
+
 
 @app.route('/api/admin/reject', methods=['POST'])
 def reject():
@@ -2556,6 +2661,85 @@ def dashboard_platform_breakdown():
     rows = cur.fetchall()
     cur.close()
     return jsonify({'success': True, 'breakdown': rows})
+
+@app.route('/api/dashboard/accounts')
+def dashboard_accounts():
+    if 'user_email' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        SELECT id, platform, account_username, discord_username, created_at
+        FROM client_accounts WHERE client_email=%s ORDER BY created_at DESC, id DESC
+    """, (session['user_email'],))
+    accounts = cur.fetchall()
+    cur.close()
+
+    profile_hosts = {
+        'tiktok': 'https://www.tiktok.com/@',
+        'instagram': 'https://www.instagram.com/',
+        'youtube': 'https://www.youtube.com/@',
+        'x': 'https://x.com/',
+        'twitch': 'https://www.twitch.tv/',
+        'facebook': 'https://www.facebook.com/'
+    }
+    for account in accounts:
+        platform_key = (account.get('platform') or '').lower()
+        base_url = profile_hosts.get(platform_key)
+        username = (account.get('account_username') or '').strip().lstrip('@')
+        account['profile_url'] = (base_url + username) if base_url and username else None
+        if account.get('created_at'):
+            account['created_at'] = str(account['created_at'])
+    return jsonify({'success': True, 'accounts': accounts})
+
+
+@app.route('/api/dashboard/accounts/<int:account_id>/clips')
+def dashboard_account_clips(account_id):
+    """Return only clips matching this account's Discord username + platform
+    across campaigns belonging to the currently logged-in client."""
+    if 'user_email' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'}), 401
+    email = session['user_email']
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        SELECT id, client_email, platform, account_username, discord_username
+        FROM client_accounts WHERE id=%s AND client_email=%s
+    """, (account_id, email))
+    account = cur.fetchone()
+    if not account:
+        cur.close()
+        return jsonify({'success': False, 'message': 'Account not found'}), 404
+
+    platform_aliases = {
+        'tiktok': ['tiktok', 'tt'],
+        'instagram': ['instagram', 'ig', 'reels', 'instagram reels'],
+        'youtube': ['youtube', 'yt', 'shorts', 'youtube shorts'],
+        'x': ['x', 'twitter'],
+        'twitch': ['twitch'],
+        'facebook': ['facebook', 'fb']
+    }
+    platform_key = (account.get('platform') or '').lower()
+    aliases = platform_aliases.get(platform_key, [platform_key])
+    placeholders = ','.join(['%s'] * len(aliases))
+    discord_name = (account.get('discord_username') or '').strip().lstrip('@').lower()
+
+    cur.execute(f"""
+        SELECT tc.id, tc.campaign_id, c.campaign_name, tc.clipper_name,
+               tc.platform, tc.views, tc.url, tc.status, tc.added_at,
+               tc.reviewed_by, tc.reject_reason, tc.likes, tc.comments, tc.shares
+        FROM top_clips tc
+        INNER JOIN campaigns c ON c.campaign_id=tc.campaign_id
+        WHERE LOWER(c.client_email)=LOWER(%s)
+          AND LOWER(REPLACE(TRIM(tc.clipper_name), '@', ''))=%s
+          AND LOWER(TRIM(tc.platform)) IN ({placeholders})
+        ORDER BY tc.added_at DESC
+    """, tuple([email, discord_name] + aliases))
+    clips = cur.fetchall()
+    for clip in clips:
+        if clip.get('added_at'):
+            clip['added_at'] = str(clip['added_at'])
+    cur.close()
+    return jsonify({'success': True, 'account': account, 'clips': clips})
+
 
 @app.route('/api/dashboard/clips')
 def dashboard_all_clips():

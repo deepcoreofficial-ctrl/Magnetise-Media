@@ -1816,6 +1816,7 @@ async function loadAllClients() {
             const createBtn = ((st === 'ACTIVE' || st === 'COMPLETED') && _me.role === 'super')
                 ? `<button class="btn-sm btn-create" onclick="aCreate('${uid}')">+ Create Campaign</button>` : '';
             const shared = `
+                <button class="btn-sm btn-view" onclick="openClientAccounts('${uid}')">Accounts</button>
                 ${hasCampaign ? `<a class="btn-sm" href="/api/admin/invoice/${esc(c.campaign_id)}" target="_blank">Invoice</a>` : ''}
                 ${(st==='ACTIVE'||st==='COMPLETED') ? `<button class="btn-sm" onclick="aResetPw('${uid}')">Reset Password</button>` : ''}
                 ${hasCampaign ? `<button class="btn-sm btn-view" onclick="aViewAs('${uid}')">View as</button>` : ''}
@@ -2423,6 +2424,89 @@ async function deleteClip(clipId) {
   if (_editingClipId === clipId) resetClipForm();
   await loadClipsList(currentClipsCampaignId);
 }
+
+// ---- Client social accounts ----
+let _accountsClientUserId = null;
+async function openClientAccounts(userId){
+    _accountsClientUserId = userId;
+    document.getElementById('clientAccountsList').innerHTML='<div class="loading">Loading accounts...</div>';
+    const modal=document.getElementById('clientAccountsModal');
+    modal.classList.add('open');
+    if(!modal.dataset.backdropBound){
+        modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
+        modal.dataset.backdropBound='1';
+    }
+    await loadClientAccounts();
+}
+async function loadClientAccounts(){
+    if(!_accountsClientUserId)return;
+    const list=document.getElementById('clientAccountsList');
+    try{
+        const res=await fetch('/api/admin/client-accounts/'+encodeURIComponent(_accountsClientUserId));
+        const data=await res.json();
+        if(!res.ok||!data.success){list.innerHTML=`<p style="color:#ff8080;">${esc(data.message||'Could not load accounts')}</p>`;return;}
+        document.getElementById('clientAccountsClient').innerHTML=
+            `<p>Client: <strong>${esc(data.client.full_name||'')}</strong></p><p>Email: <strong>${esc(data.client.email||'')}</strong></p>`;
+        const accounts=data.accounts||[];
+        if(!accounts.length){list.innerHTML='<div class="shell-empty"><p>No accounts added for this client yet.</p></div>';return;}
+        list.innerHTML=accounts.map(a=>`
+            <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
+                <div class="field-row">
+                    <div class="field"><label>Platform</label>
+                        <select id="accPlatform${a.id}" class="field">
+                            ${['TikTok','Instagram','YouTube','X','Twitch','Facebook','Other'].map(p=>`<option value="${p}" ${p===a.platform?'selected':''}>${p}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="field"><label>Account username</label><input id="accUsername${a.id}" value="${esc(a.account_username)}"></div>
+                    <div class="field"><label>Clipper Discord username</label><input id="accDiscord${a.id}" value="${esc(a.discord_username)}"></div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="btn-sm btn-view" onclick="saveClientAccount(${a.id})">Save</button>
+                    <button class="btn-sm btn-reject" onclick="deleteClientAccount(${a.id})">Delete</button>
+                </div>
+            </div>`).join('');
+    }catch(e){list.innerHTML='<p style="color:#ff8080;">Connection error loading accounts.</p>';}
+}
+async function createClientAccount(){
+    const payload={
+        user_id:_accountsClientUserId,
+        platform:document.getElementById('newAccountPlatform').value,
+        account_username:document.getElementById('newAccountUsername').value.trim(),
+        discord_username:document.getElementById('newAccountDiscord').value.trim()
+    };
+    if(!payload.account_username||!payload.discord_username){showToast('Enter both usernames.','error');return;}
+    try{
+        const res=await fetch('/api/admin/client-accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data=await res.json();
+        if(!res.ok||!data.success){showToast(data.message||'Could not add account.','error');return;}
+        document.getElementById('newAccountUsername').value='';
+        document.getElementById('newAccountDiscord').value='';
+        showToast('Account added.','success');await loadClientAccounts();
+    }catch(e){showToast('Connection error.','error');}
+}
+async function saveClientAccount(id){
+    const payload={
+        platform:document.getElementById('accPlatform'+id).value,
+        account_username:document.getElementById('accUsername'+id).value.trim(),
+        discord_username:document.getElementById('accDiscord'+id).value.trim()
+    };
+    try{
+        const res=await fetch('/api/admin/client-accounts/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data=await res.json();
+        if(!res.ok||!data.success){showToast(data.message||'Could not update account.','error');return;}
+        showToast('Account updated.','success');await loadClientAccounts();
+    }catch(e){showToast('Connection error.','error');}
+}
+async function deleteClientAccount(id){
+    if(!confirm('Delete this assigned account?'))return;
+    try{
+        const res=await fetch('/api/admin/client-accounts/'+id,{method:'DELETE'});
+        const data=await res.json();
+        if(!res.ok||!data.success){showToast(data.message||'Could not delete account.','error');return;}
+        showToast('Account deleted.','success');await loadClientAccounts();
+    }catch(e){showToast('Connection error.','error');}
+}
+
 </script>
 <!-- ===== Notifications bell (added) ===== -->
 <style>
@@ -2520,6 +2604,36 @@ async function deleteClip(clipId) {
     setInterval(()=>{if(!document.hidden) load();},60000);
 })();
 </script>
+<!-- CLIENT SOCIAL ACCOUNTS MODAL -->
+<div class="modal-overlay" id="clientAccountsModal">
+    <div class="modal" style="max-width:760px;width:calc(100% - 28px);">
+        <div class="modal-header">
+            <div class="modal-title">Manage Client Accounts</div>
+            <button class="modal-close" onclick="closeModal('clientAccountsModal')">×</button>
+        </div>
+        <div id="clientAccountsClient" class="modal-client-info"></div>
+        <div style="border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+            <div style="font-weight:700;color:#fff;margin-bottom:12px;">Add account</div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Platform</label>
+                    <select id="newAccountPlatform" class="field">
+                        <option value="TikTok">TikTok</option><option value="Instagram">Instagram</option>
+                        <option value="YouTube">YouTube</option><option value="X">X / Twitter</option>
+                        <option value="Twitch">Twitch</option><option value="Facebook">Facebook</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="field"><label>Account username</label><input id="newAccountUsername" placeholder="@accountname"></div>
+                <div class="field"><label>Clipper Discord username</label><input id="newAccountDiscord" placeholder="Discord username"></div>
+            </div>
+            <button class="btn-modal-primary" onclick="createClientAccount()">Add Account</button>
+        </div>
+        <div style="font-weight:700;color:#fff;margin-bottom:10px;">Assigned accounts</div>
+        <div id="clientAccountsList"><div class="loading">Loading accounts...</div></div>
+    </div>
+</div>
+
 <!-- ===== /Notifications bell ===== -->
 
 </body>

@@ -388,6 +388,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
             Clips
         </div>
+        <div class="sb-item" id="nav-accounts" onclick="showPage('accounts',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="10" r="2"/><path d="M6 16c.7-1.7 4.3-1.7 5 0M14 9h4M14 13h4"/></svg>
+            Accounts
+        </div>
         <div class="sb-item" id="nav-account" onclick="showPage('account',this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Account
@@ -440,6 +444,15 @@
             <p>Every clip submitted to your campaign</p>
         </div>
         <div id="clipsContent"><div style="color:#555;padding:40px 0;">Loading...</div></div>
+    </div>
+
+    <!-- CLIENT ACCOUNTS PAGE -->
+    <div class="page" id="page-accounts">
+        <div class="page-header">
+            <h1>Client <span>Accounts</span></h1>
+            <p>Social accounts managed for your campaigns</p>
+        </div>
+        <div id="accountsContent"><div style="color:#555;padding:40px 0;">Loading accounts...</div></div>
     </div>
 
     <!-- ACCOUNT PAGE -->
@@ -604,6 +617,7 @@ function showPage(name,el){
     if(name==='analytics'&&_dashData)renderAnalytics(_dashData);
     if(name==='account'&&_dashData)fillAccount(_dashData);
     if(name==='clips')loadClipsPage();
+    if(name==='accounts')loadAccountsPage();
 }
 
 async function init(){
@@ -1091,6 +1105,65 @@ async function loadLeaderboard(){
         rows.forEach((r,i)=>{html+=`<div class="leaderboard-row"><div class="lb-rank ${rc(i)}">${i+1}</div><div><div class="lb-name">${esc(r.clipper_name||'Clipper #'+(i+1))}</div><div class="lb-platform">${esc(r.platform||'')}</div></div><div class="lb-views">${Number(r.views||0).toLocaleString()} views</div></div>`;});
         html+=`</div>`;section.innerHTML=html;
     }catch(e){section.innerHTML='';}
+}
+
+
+// ---- Client-managed social accounts ----
+async function loadAccountsPage(){
+    const el=document.getElementById('accountsContent');if(!el)return;
+    el.innerHTML='<div style="color:#666;padding:28px 0;">Loading accounts...</div>';
+    try{
+        const res=await fetch('/api/dashboard/accounts');
+        const data=await res.json();
+        if(!res.ok||!data.success){el.innerHTML='<div class="no-clips">Could not load your assigned accounts.</div>';return;}
+        const accounts=data.accounts||[];
+        if(!accounts.length){el.innerHTML='<div class="glass"><div class="no-clips">No social accounts have been added to your dashboard yet.</div></div>';return;}
+        el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">`+
+        accounts.map(a=>`
+            <div class="glass" style="padding:20px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                    <div style="min-width:0;">
+                        <div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.08em;">${esc(a.platform||'Social')}</div>
+                        <div style="font-size:18px;font-weight:750;color:#fff;margin-top:5px;overflow-wrap:anywhere;">@${esc((a.account_username||'').replace(/^@/,''))}</div>
+                        <div style="font-size:12px;color:#888;margin-top:8px;">Clipper: <strong style="color:#ccc;">${esc(a.discord_username||'—')}</strong></div>
+                    </div>
+                    <div style="width:38px;height:38px;flex-shrink:0;border-radius:11px;background:rgba(255,255,255,.07);display:grid;place-items:center;color:#ddd;font-weight:800;">${esc((a.platform||'?').slice(0,1).toUpperCase())}</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;">
+                    ${a.profile_url?`<a class="btn-primary" href="${esc(a.profile_url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">View Page ↗</a>`:`<span class="btn-primary" style="opacity:.45;cursor:not-allowed;">Profile link unavailable</span>`}
+                    <button class="btn-primary" type="button" onclick="loadAccountSubmittedClips(${Number(a.id)},this)">View Submitted Clips</button>
+                </div>
+                <div id="accountClips${Number(a.id)}" style="margin-top:12px;"></div>
+            </div>`).join('')+`</div>`;
+    }catch(e){el.innerHTML='<div class="no-clips">Connection error while loading accounts.</div>';}
+}
+async function loadAccountSubmittedClips(accountId,button){
+    const panel=document.getElementById('accountClips'+accountId);if(!panel)return;
+    if(panel.dataset.loaded==='true'&&panel.style.display!=='none'){panel.style.display='none';button.textContent='View Submitted Clips';return;}
+    button.disabled=true;button.textContent='Loading...';
+    panel.style.display='block';panel.innerHTML='<div style="color:#777;font-size:12px;padding:10px 0;">Loading submitted clips...</div>';
+    try{
+        const res=await fetch('/api/dashboard/accounts/'+accountId+'/clips');
+        const data=await res.json();
+        if(!res.ok||!data.success){panel.innerHTML='<div style="color:#ff8888;font-size:12px;">Could not load clips for this account.</div>';return;}
+        const clips=data.clips||[];
+        panel.dataset.loaded='true';
+        if(!clips.length){panel.innerHTML='<div style="color:#777;font-size:12px;padding:10px 0;">No submitted clips found for this account yet.</div>';return;}
+        panel.innerHTML=`<div style="border-top:1px solid rgba(255,255,255,.1);padding-top:12px;display:flex;flex-direction:column;gap:9px;">`+
+        clips.map(c=>{
+            const status=(c.status||'pending').toLowerCase();
+            const url=(c.url&&/^https?:\/\//i.test(c.url))?esc(c.url):'';
+            return `<div style="padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:9px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <span style="font-size:11px;color:#aaa;">${esc(c.campaign_name||c.campaign_id||'Campaign')}</span>
+                    <span class="clip-status ${status}">${esc(status)}</span>
+                </div>
+                <div style="font-size:12px;color:#ddd;margin-top:6px;">${Number(c.views||0).toLocaleString()} views · ${esc((c.added_at||'').slice(0,10))}</div>
+                ${url?`<a class="clip-link" href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;">Open Clip ↗</a>`:''}
+            </div>`;
+        }).join('')+`</div>`;
+    }catch(e){panel.innerHTML='<div style="color:#ff8888;font-size:12px;">Connection error loading clips.</div>';}
+    finally{button.disabled=false;button.textContent='Hide Submitted Clips';}
 }
 
 async function loadClipsPage(){
