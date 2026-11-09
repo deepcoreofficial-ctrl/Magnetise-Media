@@ -982,6 +982,52 @@ async function loadAnalyticsGraph(days=7){
         });
     }catch(e){}
 }
+/* ---- Link Clicks card (campaign tracking link) on the Analytics page ---- */
+let _linkChart=null;
+function setLinkTimeFrame(btn,days){btn.parentElement.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadLinkClicks(days);}
+function copyTrackLink(){
+    const inp=document.getElementById('trackLinkInput'); if(!inp) return;
+    const done=()=>{const b=document.getElementById('trackCopyBtn'); if(b){b.textContent='Copied';setTimeout(()=>{b.textContent='Copy';},1500);}};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(inp.value).then(done).catch(()=>{inp.select();document.execCommand('copy');done();});}
+    else{inp.select();document.execCommand('copy');done();}
+}
+async function loadLinkClicks(days=7){
+    const body=document.getElementById('linkClicksBody'); if(!body) return;
+    try{
+        const res=await fetch(days?`/api/dashboard/tracking?days=${days}`:'/api/dashboard/tracking');
+        const d=await res.json();
+        if(_linkChart){_linkChart.destroy();_linkChart=null;}
+        if(!d.success){body.innerHTML='<div class="no-graph">Could not load link clicks.</div>';return;}
+        if(!d.enabled){body.innerHTML='<div class="no-graph">Link tracking is not set up for this campaign yet.<br>Ask your account manager to generate your campaign link.</div>';return;}
+        const t=d.totals||{clicks:0,unique:0};
+        const period=days===1?'the last 24 hours':(days?`the last ${days} days`:'all time');
+        const srcRows=(d.sources&&d.sources.length)?d.sources.map(x=>`<div class="info-row"><span class="info-key">${esc(x.name)}</span><span class="info-val">${Number(x.clicks).toLocaleString()}</span></div>`).join(''):'<div style="color:#555;font-size:13px;padding:8px 0;">No clicks yet.</div>';
+        body.innerHTML=`
+            <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px;">
+                <div class="stat-card"><div class="stat-label">Total Views</div><div class="stat-value white">${Number(d.views||0).toLocaleString()}</div></div>
+                <div class="stat-card"><div class="stat-label">People Who Clicked</div><div class="stat-value green">${Number(t.unique).toLocaleString()}</div></div>
+                <div class="stat-card"><div class="stat-label">Total Clicks</div><div class="stat-value white">${Number(t.clicks).toLocaleString()}</div></div>
+                <div class="stat-card"><div class="stat-label">Conversion</div><div class="stat-value amber">${d.conversion}%</div></div>
+            </div>
+            <div style="color:#777;font-size:12px;text-align:center;margin-bottom:14px;line-height:1.6;">Clicks and people are for ${period}; total views and conversion are all time.<br>People who tapped your campaign link and landed on <strong style="color:#bbb;">${esc(d.destination||'your page')}</strong>. Each person is counted once. Conversion = people who clicked &divide; total views.</div>
+            ${(d.series||[]).length?'<canvas id="linkClicksChart"></canvas>':'<div class="no-graph">No clicks in this period yet.</div>'}
+            <div style="margin-top:18px;"><div class="stat-label" style="margin-bottom:6px;">Where clicks came from</div>${srcRows}</div>
+            ${d.link?`<div style="margin-top:18px;"><div class="stat-label" style="margin-bottom:6px;">Your campaign link</div>
+                <div style="display:flex;gap:8px;"><input id="trackLinkInput" readonly value="${esc(d.link)}" onclick="this.select()" style="flex:1;min-width:0;background:#101010;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;"/><button class="tf-btn" id="trackCopyBtn" onclick="copyTrackLink()">Copy</button></div>
+                <div style="color:#666;font-size:12px;margin-top:6px;">Our clippers put this link in their captions and bio. Everyone who taps it is counted and sent to your page.</div></div>`:''}`;
+        if((d.series||[]).length&&typeof Chart!=='undefined'){
+            const cv=document.getElementById('linkClicksChart');
+            _linkChart=new Chart(cv.getContext('2d'),{
+                type:'line',
+                data:{labels:d.series.map(p=>_histLabel(p,days)),datasets:[
+                    {label:'Clicks',data:d.series.map(p=>p.clicks),borderColor:'#ffffff',backgroundColor:'rgba(255,255,255,0.08)',fill:true,tension:0.35,borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#fff'},
+                    {label:'New people',data:d.series.map(p=>p.unique),borderColor:'#22c55e',backgroundColor:'transparent',tension:0.35,borderWidth:2,pointRadius:3,pointBackgroundColor:'#22c55e'}]},
+                options:{responsive:true,plugins:{legend:{display:true,labels:{color:'#888',boxWidth:12}}},scales:{x:{ticks:{color:'#555'},grid:{color:'rgba(255,255,255,0.04)'}},y:{beginAtZero:true,ticks:{color:'#555',precision:0},grid:{color:'rgba(255,255,255,0.04)'}}}}
+            });
+        }
+    }catch(e){body.innerHTML='<div class="no-graph">Could not load link clicks.</div>';}
+}
+
 function setAnalyticsTimeFrame(btn,days){btn.parentElement.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadAnalyticsGraph(days);}
 
 async function loadTopClips(){
@@ -1251,9 +1297,26 @@ async function renderAnalytics(d){
 
             </div>
 
+            <div class="graph-card" id="linkClicksCard">
+
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                    <div class="section-title" style="margin-bottom:0;">Link Clicks</div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="tf-btn" onclick="setLinkTimeFrame(this,1)">24H</button>
+                        <button class="tf-btn active" onclick="setLinkTimeFrame(this,7)">7D</button>
+                        <button class="tf-btn" onclick="setLinkTimeFrame(this,30)">30D</button>
+                        <button class="tf-btn" onclick="setLinkTimeFrame(this,null)">All</button>
+                    </div>
+                </div>
+
+                <div id="linkClicksBody"><div class="no-graph">Loading...</div></div>
+
+            </div>
+
         `;
 
         loadAnalyticsGraph(7);
+        loadLinkClicks(7);
 
     }
 

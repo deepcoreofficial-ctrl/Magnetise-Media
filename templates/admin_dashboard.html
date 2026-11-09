@@ -867,7 +867,7 @@
         </div>
         <div class="modal-client-info" id="campaignClientInfo"></div>
         <div id="campaignForm">
-            <div class="field"><label>Campaign Name</label><input type="text" id="campaignName" placeholder="e.g. Product Launch Q1"/></div>
+            <div class="field"><label>Campaign Name</label><input type="text" id="campaignName" placeholder="e.g. Product Launch Q1" oninput="autoCampaignSlug()"/></div>
             <div class="field-row">
                 <div class="field"><label>Budget ($)</label><input type="number" id="campaignBudget" placeholder="1000"/></div>
                 <div class="field"><label>Target Views</label><input type="number" id="campaignViews" placeholder="300000"/></div>
@@ -875,6 +875,13 @@
             <div class="field-row">
                 <div class="field"><label>Start Date</label><input type="date" id="campaignStart"/></div>
                 <div class="field"><label>End Date</label><input type="date" id="campaignEnd"/></div>
+            </div>
+            <div class="pw-section" id="campaignLinkSection" style="margin-bottom:14px;">
+                <div class="pw-section-title">Campaign Link (optional)</div>
+                <div class="field"><label>Client's page <span style="color:#aaa;font-size:11px;">(where people land, e.g. their YouTube channel)</span></label><input type="text" id="campaignDest" placeholder="https://youtube.com/@clientchannel"/></div>
+                <div class="field" style="margin-bottom:0;"><label>Link name <span style="color:#aaa;font-size:11px;">(shows in the link)</span></label>
+                    <div style="display:flex;align-items:center;gap:6px;"><span style="color:#888;font-size:12px;white-space:nowrap;">.../go/</span><input type="text" id="campaignSlug" placeholder="testing-channel" oninput="_slugTouched=true"/></div></div>
+                <div style="color:#777;font-size:12px;margin-top:8px;line-height:1.5;">One link for the whole campaign: you give the same link to every clipper. Leave the page empty to skip; you can generate it later with the <strong>Tracking Link</strong> button on the client's row.</div>
             </div>
             <div class="modal-client-info" id="campaignExistingNote" style="display:none;margin-bottom:14px;"></div>
             <div class="pw-section" id="campaignPwSection">
@@ -919,6 +926,37 @@
 </div>
 
 <!-- EMAIL MODAL -->
+<div class="modal-overlay" id="trackModal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Campaign Link</div>
+            <button class="modal-close" onclick="closeModal('trackModal')">&times;</button>
+        </div>
+        <div class="modal-client-info" id="trackInfo"></div>
+        <div id="trackMsgBox" class="msg-box"></div>
+        <div class="field">
+            <label>Client's page <span style="color:#aaa;font-size:11px;">(where people land when they tap the link)</span></label>
+            <input type="text" id="trackDest" placeholder="https://youtube.com/@clientchannel"/>
+        </div>
+        <div class="field">
+            <label>Link name <span style="color:#aaa;font-size:11px;">(shows in the link)</span></label>
+            <div style="display:flex;align-items:center;gap:6px;"><span style="color:#888;font-size:12px;white-space:nowrap;">.../go/</span><input type="text" id="trackSlug" placeholder="testing-channel"/></div>
+            <div id="trackSlugNote" style="color:#777;font-size:12px;margin-top:6px;"></div>
+        </div>
+        <div class="field" id="trackLinkField" style="display:none;">
+            <label>Campaign link <span style="color:#aaa;font-size:11px;">(give this to all clippers)</span></label>
+            <div style="display:flex;gap:8px;"><input type="text" id="trackGeneral" readonly onclick="this.select()" style="font-family:monospace;flex:1;min-width:0;"/><button class="btn-modal-cancel" type="button" onclick="copyTextToClipboard(document.getElementById('trackGeneral').value)">Copy</button></div>
+        </div>
+        <div class="field"><label>Results so far</label>
+            <div id="trackStats" style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;color:var(--muted);line-height:1.8;"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModal('trackModal')">Close</button>
+            <button class="btn-modal-primary" id="trackSaveBtn" onclick="saveTracking()">Generate link</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-overlay" id="emailModal">
     <div class="modal">
         <div class="modal-header">
@@ -1781,6 +1819,7 @@ async function loadAllClients() {
                 ${hasCampaign ? `<a class="btn-sm" href="/api/admin/invoice/${esc(c.campaign_id)}" target="_blank">Invoice</a>` : ''}
                 ${(st==='ACTIVE'||st==='COMPLETED') ? `<button class="btn-sm" onclick="aResetPw('${uid}')">Reset Password</button>` : ''}
                 ${hasCampaign ? `<button class="btn-sm btn-view" onclick="aViewAs('${uid}')">View as</button>` : ''}
+                ${hasCampaign ? `<button class="btn-sm" onclick="aTracking('${esc(c.campaign_id)}')">Campaign Link</button>` : ''}
                 <button class="btn-sm" onclick="aDetails('${uid}')">Details</button>
                 <button class="btn-sm" onclick="aDelete('${uid}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Delete</button>`;
             return `<tr>
@@ -1799,6 +1838,7 @@ function openCampaignModal(userId, name, email) {
     const stKnown = (known.account_status || '').toUpperCase();
     const existing = (stKnown === 'ACTIVE' || stKnown === 'COMPLETED');   // already has a login + password
     currentClient = { userId, name, email, existing };
+    document.getElementById('campaignDest').value = ''; document.getElementById('campaignSlug').value = ''; _slugTouched = false;
     const noteEl = document.getElementById('campaignExistingNote');
     document.getElementById('campaignPwSection').style.display = existing ? 'none' : '';
     document.getElementById('campaignSendBtn').style.display = '';
@@ -1849,6 +1889,19 @@ async function submitCampaign() {
                 document.getElementById('campaignSuccessText').textContent = 'The client already has a login. They will see this campaign the next time they open their dashboard.';
             }
             document.getElementById('campaignSuccess').style.display = 'block';
+            const dest = document.getElementById('campaignDest').value.trim();
+            if (dest) {
+                const box = document.getElementById('credsDisplay');
+                try {
+                    const lr = await fetch('/api/admin/tracking/set', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({campaign_id:data.campaign_id, destination_url:dest, slug:document.getElementById('campaignSlug').value.trim()}) });
+                    const ld = await lr.json();
+                    if (ld.success && ld.campaign_link) {
+                        box.insertAdjacentHTML('beforeend', `<div class="creds-row"><span class="creds-label">Campaign link</span><span class="creds-value" style="word-break:break-all;">${esc(ld.campaign_link)}</span></div><div style="margin-top:10px;"><button class="btn-modal-cancel" type="button" data-link="${esc(ld.campaign_link)}" onclick="copyTextToClipboard(this.dataset.link)">Copy link</button> <span style="color:#777;font-size:12px;">Give this link to all clippers.</span></div>`);
+                    } else {
+                        box.insertAdjacentHTML('beforeend', `<div class="creds-row"><span class="creds-label">Campaign link</span><span class="creds-value" style="color:#ff8a8a;">Not created: ${esc(ld.message||'error')}. Use the Tracking Link button on the client's row.</span></div>`);
+                    }
+                } catch { box.insertAdjacentHTML('beforeend', `<div class="creds-row"><span class="creds-label">Campaign link</span><span class="creds-value" style="color:#ff8a8a;">Not created (connection error). Use the Tracking Link button on the client's row.</span></div>`); }
+            }
         } else { showModalMsg(msgBox, data.message||'Error.', 'error'); }
     } catch { showModalMsg(msgBox,'Connection error.','error'); }
     finally { document.getElementById('createCampaignBtn').disabled=false; document.getElementById('createCampaignBtn').textContent='Create Campaign'; }
@@ -2223,6 +2276,63 @@ function setTodayDate() {
 }
 
 function closeModal(id){document.getElementById(id).classList.remove('open');}
+/* ---- Campaign link (tracking) ---- */
+let _trackCid=null, _slugTouched=false;
+function slugifyName(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40).replace(/-+$/,'');}
+function autoCampaignSlug(){ if(_slugTouched) return; document.getElementById('campaignSlug').value=slugifyName(document.getElementById('campaignName').value); }
+function copyTextToClipboard(t){
+    const ok=()=>showToast('Link copied','success');
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok).catch(()=>{});}
+    else{const i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy');ok();}catch(e){}i.remove();}
+}
+function _trackFill(d){
+    document.getElementById('trackInfo').innerHTML=`<p>Campaign: <strong>${esc(d.campaign_name||_trackCid)}</strong></p><p>One link for the whole campaign. Give the same link to every clipper for their captions and bio. Everyone who taps it is counted and sent to the client's page.</p>`;
+    document.getElementById('trackDest').value=d.destination_url||'';
+    const slug=document.getElementById('trackSlug'), note=document.getElementById('trackSlugNote'), f=document.getElementById('trackLinkField'), btn=document.getElementById('trackSaveBtn');
+    if(d.slug){
+        slug.value=d.slug; slug.disabled=true;
+        note.textContent="The link name can't be changed after it is created, because clippers already use it. You can change the page it opens at any time.";
+        btn.textContent='Save';
+    }else{
+        slug.value=slugifyName(d.campaign_name); slug.disabled=false;
+        note.textContent='Letters, numbers and dashes. Leave it to use the campaign name.';
+        btn.textContent='Generate link';
+    }
+    if(d.campaign_link){f.style.display='';document.getElementById('trackGeneral').value=d.campaign_link;}else{f.style.display='none';}
+    const t=d.total||{clicks:0,unique:0}, w=d.last7||{clicks:0,unique:0};
+    const src=(d.sources||[]).slice(0,4).map(x=>`${esc(x.name)}: ${Number(x.clicks).toLocaleString()}`).join(' &middot; ');
+    document.getElementById('trackStats').innerHTML=`All time: <strong style="color:#fff;">${Number(t.unique).toLocaleString()}</strong> people clicked (${Number(t.clicks).toLocaleString()} clicks)<br>Last 7 days: <strong style="color:#fff;">${Number(w.unique).toLocaleString()}</strong> people (${Number(w.clicks).toLocaleString()} clicks)${src?`<br>From: ${src}`:''}`;
+}
+async function aTracking(cid){
+    _trackCid=cid;
+    const box=document.getElementById('trackMsgBox'); box.style.display='none';
+    document.getElementById('trackStats').textContent='Loading...';
+    document.getElementById('trackModal').classList.add('open');
+    try{
+        const r=await fetch('/api/admin/tracking/'+encodeURIComponent(cid)); const d=await r.json();
+        if(!d.success){showModalMsg(box,d.message||'Could not load this campaign','error');document.getElementById('trackStats').textContent='';return;}
+        _trackFill(d);
+    }catch(e){showModalMsg(box,'Connection error. Try again.','error');}
+}
+async function saveTracking(){
+    const box=document.getElementById('trackMsgBox'), btn=document.getElementById('trackSaveBtn'), slug=document.getElementById('trackSlug');
+    const dest=document.getElementById('trackDest').value.trim();
+    if(!dest){showModalMsg(box,"Enter the client's page first, for example https://youtube.com/@clientchannel",'error');return;}
+    btn.disabled=true;
+    try{
+        const r=await fetch('/api/admin/tracking/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaign_id:_trackCid,destination_url:dest,slug:slug.disabled?'':slug.value.trim()})});
+        const d=await r.json();
+        if(d.success){
+            const first=!slug.disabled;
+            showModalMsg(box,first?'Link generated. Copy it and give it to all clippers.':'Saved. The link now opens the new page.','success');
+            document.getElementById('trackDest').value=d.destination_url||dest;
+            if(d.slug){slug.value=d.slug;slug.disabled=true;document.getElementById('trackSlugNote').textContent="The link name can't be changed after it is created, because clippers already use it. You can change the page it opens at any time.";btn.textContent='Save';}
+            const f=document.getElementById('trackLinkField');
+            if(d.campaign_link){f.style.display='';document.getElementById('trackGeneral').value=d.campaign_link;}
+        }else{showModalMsg(box,d.message||'Could not save','error');}
+    }catch(e){showModalMsg(box,'Connection error. Try again.','error');}
+    btn.disabled=false;
+}
 function showModalMsg(el,text,type){el.textContent=text;el.className='msg-box '+type;el.style.display='block';}
 function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+type+' show';setTimeout(()=>t.classList.remove('show'),3000);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

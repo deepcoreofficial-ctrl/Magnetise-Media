@@ -3304,6 +3304,346 @@ def notifications_mark_all_read():
         return jsonify({'success': False}), 500
     return jsonify({'success': True})
 
+# ===== LINK TRACKING START =====
+
+import hashlib
+import secrets as _secrets
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+_TL_READY = False
+_TL_CACHE = {}                                              # code -> (link_id, campaign_id, destination)
+_TL_CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789'          # no 0/o/1/l/i to avoid typos
+_TL_BOT_RE = re.compile(
+    r'bot|crawl|spider|preview|facebookexternalhit|whatsapp|telegram|discord|slack|'
+    r'curl|wget|python-requests|go-http-client|headless|monitor|uptime', re.I)
+# Big social sites: send the visitor to exactly the page that was entered (no extra tags),
+# so profiles / channels open cleanly in the app or browser.
+_TL_NO_UTM = ('youtube.com', 'youtu.be', 'instagram.com', 'tiktok.com', 'facebook.com', 'fb.com',
+              'x.com', 'twitter.com', 'snapchat.com', 't.me', 'wa.me', 'whatsapp.com',
+              'linkedin.com', 'twitch.tv', 'discord.gg', 'discord.com')
+
+def ensure_tracking_tables():
+    """Create the tracking tables and campaigns.destination_url once.
+    Safe to call many times; retries later if the database was down at startup."""
+    global _TL_READY
+    if _TL_READY:
+        return
+    try:
+        with app.app_context():
+            cur = mysql.connection.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tracking_links (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    code VARCHAR(60) NOT NULL UNIQUE,
+                    campaign_id VARCHAR(40) NOT NULL,
+                    clipper_key VARCHAR(64) NOT NULL DEFAULT '',
+                    clipper_name VARCHAR(255),
+                    created_at DATETIME DEFAULT NOW(),
+                    UNIQUE KEY uq_campaign_clipper (campaign_id, clipper_key)
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS link_clicks (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    link_id INT NOT NULL,
+                    campaign_id VARCHAR(40) NOT NULL,
+                    visitor VARCHAR(32),
+                    is_unique TINYINT DEFAULT 0,
+                    referer VARCHAR(120),
+                    created_at DATETIME DEFAULT NOW(),
+                    INDEX idx_link_visitor (link_id, visitor, created_at),
+                    INDEX idx_campaign_time (campaign_id, created_at)
+                )
+            """)
+            for _sql in ("ALTER TABLE campaigns ADD COLUMN destination_url VARCHAR(500)",
+                         "ALTER TABLE tracking_links MODIFY code VARCHAR(60) NOT NULL"):
+                try:
+                    cur.execute(_sql)
+                except Exception:
+                    pass   # already done
+            mysql.connection.commit()
+            cur.close()
+        _TL_READY = True
+    except Exception as e:
+        print(f"tracking tables init skipped: {e}")
+
+try:
+    ensure_tracking_tables()
+except Exception:
+    pass
+
+def _tl_public_url(code):
+    return f"{PUBLIC_URL}/go/{code}"
+
+def _tl_ip():
+    # On Render the real visitor address is the first entry of X-Forwarded-For
+    xff = request.headers.get('X-Forwarded-For', '')
+    return (xff.split(',')[0].strip() if xff else '') or request.remote_addr or ''
+
+def _tl_visitor(ip, ua):
+    """Anonymous visitor id (a hash). The real IP address is never stored."""
+    return hashlib.sha256(f"{app.secret_key}|{ip}|{ua}".encode('utf-8')).hexdigest()[:20]
+
+def _tl_source(ref):
+    try:
+        return urlsplit(ref or '').netloc.lower()[:120]
+    except Exception:
+        return ''
+
+_TL_SOURCES = (
+    ('tiktok.com', 'TikTok'), ('instagram.com', 'Instagram'), ('youtube.com', 'YouTube'),
+    ('youtu.be', 'YouTube'), ('facebook.com', 'Facebook'), ('fb.com', 'Facebook'),
+    ('t.co', 'X (Twitter)'), ('twitter.com', 'X (Twitter)'), ('x.com', 'X (Twitter)'),
+    ('snapchat.com', 'Snapchat'), ('reddit.com', 'Reddit'), ('discord.com', 'Discord'),
+    ('whatsapp.com', 'WhatsApp'), ('t.me', 'Telegram'), ('linktr.ee', 'Linktree'),
+)
+
+def _tl_label(host):
+    h = (host or '').lower().strip()
+    if not h:
+        return 'Direct / in-app'
+    for dom, name in _TL_SOURCES:
+        if h == dom or h.endswith('.' + dom):
+            return name
+    return h
+
+def _tl_slugify(text):
+    """'AJ Clipping 2.0!' -> 'aj-clipping-2-0'  (letters, numbers and dashes only)."""
+    return re.sub(r'[^a-z0-9]+', '-', (text or '').lower()).strip('-')[:40].strip('-')
+
+def _tl_clean_destination(url):
+    """Return a safe https/http link, '' for empty, or None when invalid."""
+    u = (url or '').strip()
+    if not u:
+        return ''
+    if '://' not in u:
+        u = 'https://' + u
+    if len(u) > 500 or ' ' in u:
+        return None
+    try:
+        p = urlsplit(u)
+        p.port   # raises ValueError for a bad port
+    except ValueError:
+        return None
+    if p.scheme not in ('http', 'https') or not p.netloc or '.' not in p.netloc or '@' in p.netloc:
+        return None
+    return u
+
+def _tl_add_utm(url, campaign_id, code):
+    """For the client's own website: add utm tags so the visits also show in their analytics.
+    Social pages (YouTube, Instagram, TikTok...) are left exactly as entered."""
+    try:
+        p = urlsplit(url)
+        host = (p.hostname or '').lower()
+        if any(host == d or host.endswith('.' + d) for d in _TL_NO_UTM):
+            return url
+        q = parse_qsl(p.query, keep_blank_values=True)
+        have = {k for k, _ in q}
+        for k, v in (('utm_source', 'magnetise'), ('utm_medium', 'clip'),
+                     ('utm_campaign', campaign_id), ('utm_content', code)):
+            if k not in have:
+                q.append((k, v))
+        return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
+    except Exception:
+        return url
+
+def _tl_get_general(cur, campaign_id):
+    cur.execute("SELECT id, code FROM tracking_links WHERE campaign_id=%s AND clipper_key=''", (campaign_id,))
+    return cur.fetchone()
+
+def _tl_create_general(cur, campaign_id, wanted='', fallback=''):
+    """The campaign's single link. Returns the existing one, or creates it.
+    The name comes from `wanted` (typed by the admin) or the campaign name; if it is
+    already taken we add -2, -3 ... so it always works."""
+    row = _tl_get_general(cur, campaign_id)
+    if row:
+        return row
+    base = _tl_slugify(wanted) or _tl_slugify(fallback)
+    tries = ([base] + [f"{base[:36]}-{n}" for n in range(2, 40)]) if len(base) >= 3 else []
+    tries += [''.join(_secrets.choice(_TL_CODE_CHARS) for _ in range(7)) for _ in range(5)]
+    for code in tries:
+        try:
+            cur.execute("INSERT INTO tracking_links (code, campaign_id, clipper_key, clipper_name) VALUES (%s,%s,'',NULL)",
+                        (code, campaign_id))
+            return _tl_get_general(cur, campaign_id)
+        except Exception:
+            row = _tl_get_general(cur, campaign_id)      # a parallel request may have made it
+            if row:
+                return row
+    return None
+
+def _tl_stats(cur, campaign_id, days=None, totals_only=False):
+    """Click numbers for one campaign. days=None means all time."""
+    where = "campaign_id=%s"
+    params = [campaign_id]
+    if days:
+        where += " AND created_at >= NOW() - INTERVAL %s DAY"
+        params.append(int(days))
+    cur.execute(f"SELECT COUNT(*) AS clicks, COALESCE(SUM(is_unique),0) AS uniq FROM link_clicks WHERE {where}", tuple(params))
+    t = cur.fetchone() or {}
+    out = {'totals': {'clicks': int(t.get('clicks') or 0), 'unique': int(t.get('uniq') or 0)}}
+    if totals_only:
+        return out
+
+    bucket = 3600 if days == 1 else 86400          # hourly for 24H, daily otherwise
+    cur.execute(f"""SELECT FLOOR(UNIX_TIMESTAMP(created_at)/%s) AS b, COUNT(*) AS c, COALESCE(SUM(is_unique),0) AS u
+                    FROM link_clicks WHERE {where} GROUP BY b ORDER BY b""", (bucket, *params))
+    out['series'] = [{'ts': int(r['b']) * bucket, 'clicks': int(r['c']), 'unique': int(r['u'])}
+                     for r in cur.fetchall()]
+
+    cur.execute(f"""SELECT referer, COUNT(*) AS c FROM link_clicks WHERE {where}
+                    GROUP BY referer ORDER BY c DESC LIMIT 20""", tuple(params))
+    agg = {}
+    for r in cur.fetchall():
+        lab = _tl_label(r.get('referer'))
+        agg[lab] = agg.get(lab, 0) + int(r['c'])
+    out['sources'] = [{'name': k, 'clicks': v}
+                      for k, v in sorted(agg.items(), key=lambda kv: -kv[1])[:6]]
+    return out
+
+# ---------- the public link people tap ----------
+@app.route('/go/<code>')
+@limiter.exempt
+def tracking_redirect(code):
+    code = (code or '').strip().lower()[:60]
+    link, dest, db_ok = None, '', True
+    try:
+        ensure_tracking_tables()
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT id, campaign_id FROM tracking_links WHERE code=%s", (code,))
+        link = cur.fetchone()
+        if link:
+            cur.execute("SELECT destination_url FROM campaigns WHERE campaign_id=%s", (link['campaign_id'],))
+            dest = (((cur.fetchone() or {}).get('destination_url')) or '').strip()
+            if dest:
+                _TL_CACHE[code] = (link['id'], link['campaign_id'], dest)
+        if link and dest and request.method != 'HEAD':        # link scanners often send HEAD: not a visit
+            ua = request.headers.get('User-Agent', '')
+            if ua and not _TL_BOT_RE.search(ua):              # link-preview robots are not counted
+                v = _tl_visitor(_tl_ip(), ua)
+                cur.execute("""SELECT UNIX_TIMESTAMP() - UNIX_TIMESTAMP(created_at) AS age FROM link_clicks
+                               WHERE link_id=%s AND visitor=%s ORDER BY id DESC LIMIT 1""", (link['id'], v))
+                last = cur.fetchone()
+                age = float(last['age']) if last and last.get('age') is not None else None
+                if age is None or age >= 10:                  # a double tap within 10 seconds counts once
+                    cur.execute("""INSERT INTO link_clicks (link_id, campaign_id, visitor, is_unique, referer)
+                                   VALUES (%s,%s,%s,%s,%s)""",
+                                (link['id'], link['campaign_id'], v, 1 if age is None else 0,
+                                 _tl_source(request.referrer)))
+                    mysql.connection.commit()
+        cur.close()
+    except Exception as e:
+        db_ok = False
+        app.logger.error("tracking redirect failed: %s", e)
+        cached = _TL_CACHE.get(code)            # database hiccup: still send the visitor to the right page
+        if cached and not dest:
+            link, dest = {'id': cached[0], 'campaign_id': cached[1]}, cached[2]
+    page = lambda title, text, status: (
+        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+        f"<title>{title}</title><body style='font-family:sans-serif;text-align:center;margin-top:20vh'>"
+        f"<h2>{title}</h2><p>{text}</p></body>", status, {'Content-Type': 'text/html; charset=utf-8'})
+    if not link:
+        if not db_ok:
+            return page('Please try again', 'This link could not be opened right now. Try again in a moment.', 503)
+        return redirect('/')
+    if not dest:
+        return page('This link is not active yet', 'Please try again later.', 200)
+    resp = redirect(_tl_add_utm(dest, link['campaign_id'], code), code=302)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+# ---------- admin: generate the link / set where it goes / see the numbers ----------
+@app.route('/api/admin/tracking/<campaign_id>')
+def admin_tracking_get(campaign_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    ensure_tracking_tables()
+    cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, campaign_id):
+        cur.close(); return jsonify({'success': False, 'message': 'Not allowed'}), 403
+    cur.execute("SELECT campaign_name, destination_url FROM campaigns WHERE campaign_id=%s", (campaign_id,))
+    c = cur.fetchone()
+    if not c:
+        cur.close(); return jsonify({'success': False, 'message': 'Campaign not found'}), 404
+    g = _tl_get_general(cur, campaign_id)
+    allt = _tl_stats(cur, campaign_id, None)
+    week = _tl_stats(cur, campaign_id, 7, totals_only=True)
+    cur.close()
+    return jsonify({'success': True, 'campaign_name': c.get('campaign_name'),
+                    'destination_url': c.get('destination_url') or '',
+                    'campaign_link': _tl_public_url(g['code']) if g else None,
+                    'slug': g['code'] if g else '',
+                    'total': allt['totals'], 'last7': week['totals'], 'sources': allt['sources']})
+
+@app.route('/api/admin/tracking/set', methods=['POST'])
+def admin_tracking_set():
+    """Generate the campaign's link (first time) and/or change where it sends people.
+    The link name can only be chosen the first time, because clippers already use it after that."""
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    data = request.get_json() or {}
+    cid = data.get('campaign_id')
+    clean = _tl_clean_destination(data.get('destination_url'))
+    wanted = (data.get('slug') or '').strip()
+    if not cid:
+        return jsonify({'success': False, 'message': 'campaign_id required'}), 400
+    if clean is None:
+        return jsonify({'success': False, 'message': 'Enter a valid link, for example https://youtube.com/@clientchannel'}), 400
+    if wanted and len(_tl_slugify(wanted)) < 3:
+        return jsonify({'success': False, 'message': 'The link name needs at least 3 letters or numbers'}), 400
+    ensure_tracking_tables()
+    cur = mysql.connection.cursor()
+    if not can_access_campaign(cur, cid):
+        cur.close(); return jsonify({'success': False, 'message': 'Not allowed'}), 403
+    cur.execute("SELECT campaign_name FROM campaigns WHERE campaign_id=%s", (cid,))
+    c = cur.fetchone()
+    if not c:
+        cur.close(); return jsonify({'success': False, 'message': 'Campaign not found'}), 404
+    cur.execute("UPDATE campaigns SET destination_url=%s WHERE campaign_id=%s", (clean or None, cid))
+    link = _tl_create_general(cur, cid, wanted, c.get('campaign_name')) if clean else _tl_get_general(cur, cid)
+    mysql.connection.commit()
+    cur.close()
+    _TL_CACHE.clear()
+    return jsonify({'success': True, 'destination_url': clean,
+                    'campaign_link': _tl_public_url(link['code']) if link else None,
+                    'slug': link['code'] if link else ''})
+
+# ---------- client dashboard: the numbers the client sees ----------
+@app.route('/api/dashboard/tracking')
+@limiter.exempt
+def dashboard_tracking():
+    if 'user_email' not in session:
+        return jsonify({'success': False}), 401
+    ensure_tracking_tables()
+    raw = request.args.get('days', '')
+    days = min(max(int(raw), 1), 3650) if raw.isdigit() else None
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM users WHERE email=%s", (session['user_email'],))
+    u = cur.fetchone()
+    if not u or not u.get('campaign_id'):
+        cur.close(); return jsonify({'success': True, 'enabled': False})
+    cid = u['campaign_id']
+    cur.execute("SELECT destination_url, current_views FROM campaigns WHERE campaign_id=%s", (cid,))
+    c = cur.fetchone() or {}
+    dest = (c.get('destination_url') or '').strip()
+    g = _tl_get_general(cur, cid)
+    if not dest or not g:
+        cur.close(); return jsonify({'success': True, 'enabled': False})
+    s = _tl_stats(cur, cid, days)
+    views = int(c.get('current_views') or 0)
+    # conversion is always all-time people who clicked / all-time views, whatever period the graph shows
+    all_people = s['totals']['unique'] if not days else _tl_stats(cur, cid, None, totals_only=True)['totals']['unique']
+    cur.close()
+    try:
+        host = urlsplit(dest).netloc.lower().replace('www.', '')
+    except Exception:
+        host = ''
+    return jsonify({'success': True, 'enabled': True, 'destination': host,
+                    'link': _tl_public_url(g['code']),
+                    'totals': s['totals'], 'views': views,
+                    'conversion': round(all_people * 100.0 / views, 2) if views else 0,
+                    'series': s['series'], 'sources': s['sources']})
+# ===== LINK TRACKING END =====
 # ==========================================
 # SECURITY HEADERS
 # ==========================================
