@@ -2874,7 +2874,7 @@ def dashboard_weekly_milestones():
     weeks = []
     for w in range(total_weeks):
         week_start = start + timedelta(weeks=w)
-        week_end   = week_start + timedelta(days=6)
+        week_end   = week_start + timedelta(days=7)   # exclusive end: the 7th day must be counted too
         # Use the CUMULATIVE total at each week boundary (latest history point up to
         # that time), NOT the peak. MAX(views) made an approved-then-rejected clip mark
         # the week "hit" forever; the latest value correctly drops back when views are
@@ -2882,7 +2882,7 @@ def dashboard_weekly_milestones():
         cur.execute("""
             SELECT views FROM views_history
             WHERE campaign_id=(SELECT campaign_id FROM users WHERE email=%s)
-            AND recorded_at <= %s
+            AND recorded_at < %s
             ORDER BY recorded_at DESC LIMIT 1
         """, (session['user_email'], week_end))
         row = cur.fetchone()
