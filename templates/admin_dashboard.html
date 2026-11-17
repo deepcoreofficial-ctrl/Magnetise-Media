@@ -1821,6 +1821,7 @@ async function loadAllClients() {
                 ${(st==='ACTIVE'||st==='COMPLETED') ? `<button class="btn-sm" onclick="aResetPw('${uid}')">Reset Password</button>` : ''}
                 ${hasCampaign ? `<button class="btn-sm btn-view" onclick="aViewAs('${uid}')">View as</button>` : ''}
                 ${hasCampaign ? `<button class="btn-sm" onclick="aTracking('${esc(c.campaign_id)}')">Campaign Link</button>` : ''}
+                ${hasCampaign ? `<button class="btn-sm" title="Show or hide the campaign link on this client's dashboard" onclick="aToggleLinkVisible('${uid}', ${c.show_campaign_link==0?1:0})" style="${c.show_campaign_link==0?'border-color:rgba(255,85,85,0.35);color:#ff8080;':'border-color:rgba(80,200,120,0.4);color:#7fe0a0;'}">Client sees link: ${c.show_campaign_link==0?'No':'Yes'}</button>` : ''}
                 <button class="btn-sm" onclick="aDetails('${uid}')">Details</button>
                 <button class="btn-sm" onclick="aDelete('${uid}')" style="border-color:rgba(255,85,85,0.35);color:#ff8080;">Delete</button>`;
             return `<tr>
@@ -1832,6 +1833,15 @@ async function loadAllClients() {
             </tr>`;
         }).join('');
     } catch { tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Error loading data</p></div></td></tr>`; }
+}
+
+async function aToggleLinkVisible(uid, show) {
+    try {
+        const r = await fetch('/api/admin/client-link-visibility', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: uid, show: !!show})});
+        const d = await r.json();
+        if (!d.success) { alert(d.message || 'Could not update'); return; }
+        loadAllClients();
+    } catch { alert('Connection error'); }
 }
 
 function openCampaignModal(userId, name, email) {

@@ -1038,6 +1038,7 @@ async function loadLinkClicks(days=7){
         const d=await res.json();
         if(_linkChart){_linkChart.destroy();_linkChart=null;}
         if(!d.success){body.innerHTML='<div class="no-graph">Could not load link clicks.</div>';return;}
+        if(d.hidden){const cd=document.getElementById('linkClicksCard'); if(cd) cd.style.display='none'; return;}
         if(!d.enabled){body.innerHTML='<div class="no-graph">Link tracking is not set up for this campaign yet.<br>Ask your account manager to generate your campaign link.</div>';return;}
         const t=d.totals||{clicks:0,unique:0};
         const period=days===1?'the last 24 hours':(days?`the last ${days} days`:'all time');

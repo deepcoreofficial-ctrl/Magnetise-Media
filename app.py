@@ -897,9 +897,10 @@ def admin_clients():
     if not session.get('admin_logged_in'):
         return jsonify({'success': False}), 401
     a = eff_admin()
+    ensure_tracking_tables()     # also adds users.show_campaign_link
     cur = mysql.connection.cursor()
     base = """
-        SELECT u.user_id, u.full_name, u.email, u.account_status, u.rejection_reason,
+        SELECT u.user_id, u.full_name, u.email, u.account_status, u.rejection_reason, u.show_campaign_link,
                c.campaign_id, c.campaign_name, c.current_views, c.target_views,
                c.budget_total, c.cpm_rate, c.status AS campaign_status,
                c.start_date, c.expected_end_date, c.login_email_sent_at, c.assigned_admin_email
@@ -913,6 +914,7 @@ def admin_clients():
     clients = cur.fetchall()
     cur.close()
     for c in clients:
+        c['show_campaign_link'] = 0 if str(c.get('show_campaign_link')) == '0' else 1
         c['email_sent'] = bool(c.get('login_email_sent_at'))
         c['login_email_sent_at'] = str(c['login_email_sent_at']) if c['login_email_sent_at'] else None
         if c.get('start_date'): c['start_date'] = str(c['start_date'])
@@ -3562,6 +3564,7 @@ def ensure_tracking_tables():
                 )
             """)
             for _sql in ("ALTER TABLE campaigns ADD COLUMN destination_url VARCHAR(500)",
+                         "ALTER TABLE users ADD COLUMN show_campaign_link TINYINT(1) NOT NULL DEFAULT 1",
                          "ALTER TABLE tracking_links MODIFY code VARCHAR(60) NOT NULL"):
                 try:
                     cur.execute(_sql)
@@ -3814,6 +3817,29 @@ def admin_tracking_set():
                     'campaign_link': _tl_public_url(link['code']) if link else None,
                     'slug': link['code'] if link else ''})
 
+# ---------- admin: show / hide the campaign link for one client ----------
+@app.route('/api/admin/client-link-visibility', methods=['POST'])
+def admin_client_link_visibility():
+    if not session.get('admin_logged_in'):
+        return jsonify({'success': False}), 401
+    data = request.get_json(silent=True) or {}
+    uid = str(data.get('user_id') or '').strip()
+    show = 1 if data.get('show') in (True, 1, '1', 'true', 'yes', 'Yes') else 0
+    if not uid:
+        return jsonify({'success': False, 'message': 'user_id required'}), 400
+    ensure_tracking_tables()
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT campaign_id FROM users WHERE user_id=%s", (uid,))
+    u = cur.fetchone()
+    if not u:
+        cur.close(); return jsonify({'success': False, 'message': 'Client not found'}), 404
+    if u.get('campaign_id') and not can_access_campaign(cur, u['campaign_id']):
+        cur.close(); return jsonify({'success': False, 'message': 'Not allowed'}), 403
+    cur.execute("UPDATE users SET show_campaign_link=%s WHERE user_id=%s", (show, uid))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({'success': True, 'show': show})
+
 # ---------- client dashboard: the numbers the client sees ----------
 @app.route('/api/dashboard/tracking')
 @limiter.exempt
@@ -3824,10 +3850,12 @@ def dashboard_tracking():
     raw = request.args.get('days', '')
     days = min(max(int(raw), 1), 3650) if raw.isdigit() else None
     cur = mysql.connection.cursor()
-    cur.execute("SELECT campaign_id FROM users WHERE email=%s", (session['user_email'],))
+    cur.execute("SELECT campaign_id, show_campaign_link FROM users WHERE email=%s", (session['user_email'],))
     u = cur.fetchone()
     if not u or not u.get('campaign_id'):
         cur.close(); return jsonify({'success': True, 'enabled': False})
+    if str(u.get('show_campaign_link')) == '0':      # admin switched the campaign link OFF for this client
+        cur.close(); return jsonify({'success': True, 'enabled': False, 'hidden': True})
     cid = u['campaign_id']
     cur.execute("SELECT destination_url, current_views FROM campaigns WHERE campaign_id=%s", (cid,))
     c = cur.fetchone() or {}
@@ -3870,4 +3898,4 @@ def add_security_headers(response):
 
 if __name__ == '__main__':
     print("Magnetise Media — Starting on http://localhost:5000")
-    app.run(debug=False)
+    app.run(debug=False)
