@@ -864,13 +864,13 @@ async function openCampaignAnalyticsModal(){
         const result=await res.json();
         const history=result.history||[];
         if(history.length>=1){
-            const labels=history.map(h=>_histLabel(h,days));
+            const labels=history.map(h=>_histLabel(h,0));
             const values=history.map(h=>h.views);
             const ctx=document.getElementById('accAnalyticsChart').getContext('2d');
             const grad=ctx.createLinearGradient(0,0,0,180);
             grad.addColorStop(0,'rgba(255,255,255,0.15)');
             grad.addColorStop(1,'rgba(255,255,255,0)');
-            new Chart(ctx,{type:'line',data:{labels,datasets:[{data:values,borderColor:'#ffffff',backgroundColor:grad,borderWidth:2,pointBackgroundColor:'#fff',pointRadius:3,tension:0.4,fill:true}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#555',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{min:0,ticks:{color:'#555',font:{size:10},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}}}});
+            new Chart(ctx,{type:'line',data:{labels,datasets:[{data:values,borderColor:'#ffffff',backgroundColor:'transparent',borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:0.25,fill:false}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:_xTicks(labels,0),grid:{color:'rgba(255,255,255,0.04)'}},y:{min:0,ticks:{color:'#555',font:{size:10},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}}}});
         }else{document.getElementById('accAnalyticsChart').style.display='none';document.getElementById('accNoGraph').style.display='';}
     }catch(e){}
 }
@@ -943,7 +943,7 @@ async function loadViewsGraph(days=7){
         if(history.length<1){const c=document.getElementById('viewsChart'),m=document.getElementById('noGraphMsg');if(c)c.style.display='none';if(m)m.style.display='';return;}
         {const c0=document.getElementById('viewsChart'),m0=document.getElementById('noGraphMsg');if(c0)c0.style.display='';if(m0)m0.style.display='none';}
         const tv=_dashData?(_dashData.target_views||0):0;
-        const labels=history.map(h=>new Date(h.date).toLocaleDateString('en-IN',{month:'short',day:'numeric'}));
+        const labels=history.map(h=>_histLabel(h,days));
         const values=history.map(h=>h.views);
         if(_viewsChart)_viewsChart.destroy();
         const ctx=document.getElementById('viewsChart');if(!ctx)return;
@@ -954,8 +954,8 @@ async function loadViewsGraph(days=7){
         gradient.addColorStop(1,'rgba(255,255,255,0)');
         _viewsChart=new Chart(context,{
             type:'line',
-            data:{labels,datasets:[{label:'Views',data:values,borderColor:'#ffffff',backgroundColor:gradient,borderWidth:2.5,pointBackgroundColor:'#fff',pointBorderColor:'rgba(255,255,255,0.4)',pointBorderWidth:2,pointRadius:5,pointHoverRadius:7,pointHoverBackgroundColor:'#000',pointHoverBorderColor:'#fff',tension:0.4,fill:true}]},
-            options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,callbacks:{label:ctx=>'Views: '+Number(ctx.raw).toLocaleString()}}},scales:{x:{ticks:{color:'#555',font:{size:11}},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},y:{ticks:{color:'#555',font:{size:11},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}}}}
+            data:{labels,datasets:[{label:'Views',data:values,borderColor:'#ffffff',backgroundColor:'transparent',borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#fff',pointHoverBorderColor:'#fff',tension:0.25,fill:false}]},
+            options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,callbacks:{label:ctx=>'Views: '+Number(ctx.raw).toLocaleString()}}},scales:{x:{ticks:_xTicks(labels,days),grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},y:{ticks:{color:'#555',font:{size:11},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}}}}
         });
     }catch(e){}
 }
@@ -969,6 +969,15 @@ function _histLabel(h,days){
     return days===1
         ? dt.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'})
         : dt.toLocaleDateString('en-IN',{month:'short',day:'numeric'});
+}
+
+/* x-axis: one label per day (no "20 Nov 20 Nov 20 Nov ..."), thinned out when there are many days */
+function _xTicks(labels,days){
+    if(days===1) return {color:'#555',font:{size:11},maxRotation:0,autoSkip:true,maxTicksLimit:8};
+    const firstIdx=[]; labels.forEach((l,i)=>{ if(i===0||l!==labels[i-1]) firstIdx.push(i); });
+    const step=Math.max(1,Math.ceil(firstIdx.length/8));
+    const show=new Set(firstIdx.filter((_,k)=>k%step===0));
+    return {color:'#555',font:{size:11},maxRotation:0,autoSkip:false,callback:function(v){return show.has(v)?labels[v]:'';}};
 }
 
 /* ---- Analytics page graph with the same timeline buttons ---- */
@@ -993,8 +1002,8 @@ async function loadAnalyticsGraph(days=7){
         gradient.addColorStop(1,'rgba(255,255,255,0)');
         _analyticsChart=new Chart(ctx,{
             type:'line',
-            data:{labels,datasets:[{data:values,borderColor:'#ffffff',backgroundColor:gradient,fill:true,tension:0.4,borderWidth:2.5,pointRadius:4,pointBackgroundColor:'#fff'}]},
-            options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#555'},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#555',callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}}}
+            data:{labels,datasets:[{data:values,borderColor:'#ffffff',backgroundColor:'transparent',fill:false,tension:0.25,borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#fff'}]},
+            options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false}},scales:{x:{ticks:_xTicks(labels,days),grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#555',callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}}}
         });
     }catch(e){}
 }
