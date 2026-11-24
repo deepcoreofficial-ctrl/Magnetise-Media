@@ -954,7 +954,7 @@ async function loadViewsGraph(days=7){
         gradient.addColorStop(1,'rgba(255,255,255,0)');
         _viewsChart=new Chart(context,{
             type:'line',
-            data:{labels,datasets:[{label:'Views',data:values,borderColor:'#ffffff',backgroundColor:'gradient',borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#fff',pointHoverBorderColor:'#fff',tension:0.25,fill:true}]},
+            data:{labels,datasets:[{label:'Views',data:values,borderColor:'#ffffff',backgroundColor:gradient,borderWidth:2,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:'#fff',pointHoverBorderColor:'#fff',tension:0.25,fill:true}]},
             options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(20,20,20,0.95)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,titleColor:'#555',bodyColor:'#fff',bodyFont:{size:14,weight:'700'},padding:12,callbacks:{label:ctx=>'Views: '+Number(ctx.raw).toLocaleString()}}},scales:{x:{ticks:_xTicks(labels,days),grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}},y:{ticks:{color:'#555',font:{size:11},callback:v=>Number(v).toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'},border:{color:'rgba(255,255,255,0.06)'}}}}
         });
     }catch(e){}
